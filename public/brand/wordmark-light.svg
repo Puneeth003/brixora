@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 4 1014 182" width="1014" height="182" role="img" aria-label="Brixora">
+<defs>
+  <clipPath id="cap"><rect x="-10" y="20" width="1030" height="150"/></clipPath>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#a8761f"/><stop offset=".45" stop-color="#f1cf78"/><stop offset="1" stop-color="#9b6a1c"/>
+  </linearGradient>
+</defs><g clip-path="url(#cap)">
+    <!-- B -->
+    <path d="M16 20 V170" stroke="#06392b" stroke-width="32" fill="none"/>
+    <path d="M0 36 H88 a29.5 29.5 0 0 1 0 59 H16" stroke="#06392b" stroke-width="32" fill="none"/>
+    <path d="M16 95 H96 a29.5 29.5 0 0 1 0 59 H0" stroke="#06392b" stroke-width="32" fill="none"/>
+    <!-- R -->
+    <path d="M166 20 V170" stroke="#06392b" stroke-width="32" fill="none"/>
+    <path d="M150 36 H238 a29.5 29.5 0 0 1 0 59 H166" stroke="#06392b" stroke-width="32" fill="none"/>
+    <path d="M212 95 L274 170" stroke="#06392b" stroke-width="32" fill="none"/>
+    <!-- I -->
+    <path d="M318 20 V170" stroke="#06392b" stroke-width="32" fill="none"/>
+    <!-- X: ink stroke + gold stroke -->
+    <path d="M354 20 L490 170" stroke="#06392b" stroke-width="32" fill="none"/>
+    <path d="M494 20 L358 170" stroke="url(#gold)" stroke-width="32"/>
+    <!-- O -->
+    <circle cx="592" cy="95" r="59" stroke="#06392b" stroke-width="32" fill="none"/>
+    <!-- R -->
+    <path d="M706 20 V170" stroke="#06392b" stroke-width="32" fill="none"/>
+    <path d="M690 36 H778 a29.5 29.5 0 0 1 0 59 H706" stroke="#06392b" stroke-width="32" fill="none"/>
+    <path d="M752 95 L814 170" stroke="#06392b" stroke-width="32" fill="none"/>
+    <!-- A as a roofline with gold building bars -->
+    <path d="M842 170 L922 26 L1002 170" stroke="#06392b" stroke-width="32" fill="none" stroke-linejoin="miter"/>
+    <rect x="910" y="112" width="10" height="58" fill="url(#gold)"/>
+    <rect x="925" y="124" width="10" height="46" fill="url(#gold)"/>
+    <rect x="940" y="136" width="10" height="34" fill="url(#gold)"/></g>
+</svg>
