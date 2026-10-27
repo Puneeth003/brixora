@@ -7,7 +7,7 @@ import type { PublicProperty } from "./types";
 
 // Public reads go through the public_* views only (safe columns of live listings), and
 // are cached under the "listings" tag. Admin actions that change what is public call
-// updateTag("listings"). Without DATABASE_URL set, demo listings are served instead.
+// updateTag("listings"). Without the DB_* variables set, demo listings are served instead.
 
 export type ListingFilters = {
   q?: string;

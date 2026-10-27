@@ -39,7 +39,7 @@ The admin panel has its own look (floating dark sidebar, Nunito Sans). Its theme
 
 ## Security model
 
-- **The database is server-only.** Only the Next.js server holds `DATABASE_URL`. Every page, server action and route handler checks the caller first (`requireStaff` / `requireAdmin`, or `getOwner` plus an ownership check). Nothing in the browser talks to MySQL.
+- **The database is server-only.** Only the Next.js server holds the `DB_*` credentials. Every page, server action and route handler checks the caller first (`requireStaff` / `requireAdmin`, or `getOwner` plus an ownership check). Nothing in the browser talks to MySQL.
 - **Public reads** use the `public_properties` / `public_images` views, which expose only the safe columns of live, unexpired listings. Private address, owner, notes and originals are never in them.
 - **Sessions.** The cookie holds a random 256-bit token, and the `sessions` table stores only its SHA-256. Member (`brx_owner`, 30 days) and staff (`brx_admin`, 12 h, `Path=/admin`, `SameSite=Strict`) cookies are separate and httpOnly, and Secure in production.
 - **Staff roles** (`users.role`):
@@ -63,7 +63,7 @@ The admin panel has its own look (floating dark sidebar, Nunito Sans). Its theme
 ## Local development
 
 ```bash
-cp .env.example .env.local   # set DATABASE_URL, AUTH_SECRET
+cp .env.example .env.local   # set DB_USER, DB_PASS, DB_NAME, AUTH_SECRET
 npm install
 mysql -u USER -p DBNAME < db/schema.sql
 mysql -u USER -p DBNAME < db/migrations/002_crm.sql
@@ -77,7 +77,7 @@ npm run admin:create -- you@example.com          # prompts for a password
 npm run dev
 ```
 
-Without `DATABASE_URL` the public pages show built-in demo listings. Sign-in, accounts and admin need the database.
+Without `DB_USER` / `DB_NAME` the public pages show built-in demo listings. Sign-in, accounts and admin need the database.
 
 In development, WhatsApp messages (including login codes) and emails (reset codes, welcome emails) are printed to the server console instead of being sent. That happens when `WHATSAPP_TOKEN` / `SMTP_HOST` are empty.
 
@@ -105,7 +105,7 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
    - Production refuses to send without `SMTP_HOST`, so password resets and welcome emails need it.
 5. **Uploads folder:** create a folder outside the app directory (e.g. `/home/<user>/brixora-uploads`) and set `UPLOAD_DIR` to it. Redeploys replace the app folder, so photos must not live inside it. Include this folder in your backups.
 6. **Admin account:**
-   - Run `npm run admin:create -- you@yourdomain.in` once, over SSH or locally with `DATABASE_URL` pointing at the Hostinger database (enable Remote MySQL for your IP).
+   - Run `npm run admin:create -- you@yourdomain.in` once, over SSH or locally with the `DB_*` variables pointing at the Hostinger database (enable Remote MySQL for your IP).
    - The first sign-in at `/admin/login` walks you through authenticator-app setup (unless `ADMIN_2FA=off`).
    - Lost the authenticator? Run `npm run admin:create -- you@yourdomain.in --reset-2fa`. Forgot the password? Use "Forgot password" on the login page.
 7. **Agents & brokers:**

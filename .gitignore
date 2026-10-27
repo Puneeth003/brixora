@@ -45,3 +45,6 @@ next-env.d.ts
 
 # allow the committed template
 !.env.example
+
+# Local note with real environment values (contains secrets)
+note.txt

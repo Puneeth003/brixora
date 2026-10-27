@@ -3,16 +3,16 @@
 //   node scripts/create-admin.mjs you@yourdomain.in            create, or reset the password
 //   node scripts/create-admin.mjs you@yourdomain.in --reset-2fa  also re-enrol the authenticator
 //
-// Reads DATABASE_URL from the environment or .env.local. The password is typed at a
+// Reads DB_HOST / DB_PORT / DB_USER / DB_PASS / DB_NAME from the environment or .env.local. The password is typed at a
 // hidden prompt so it never lands in shell history. There is no admin sign-up page.
 import { randomBytes, randomUUID, scrypt } from "node:crypto";
 import fs from "node:fs";
 import readline from "node:readline";
 import mysql from "mysql2/promise";
 
-if (!process.env.DATABASE_URL && fs.existsSync(".env.local")) process.loadEnvFile(".env.local");
-if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL is not set (env or .env.local).");
+if (!process.env.DB_USER && fs.existsSync(".env.local")) process.loadEnvFile(".env.local");
+if (!process.env.DB_USER || !process.env.DB_NAME) {
+  console.error("DB_USER / DB_NAME are not set (env or .env.local).");
   process.exit(1);
 }
 
@@ -62,7 +62,15 @@ if ((await ask("Repeat password: ")) !== password) {
 
 rl.close();
 
-const db = await mysql.createConnection({ uri: process.env.DATABASE_URL, timezone: "Z" });
+const db = await mysql.createConnection({
+  host: process.env.DB_HOST || "localhost",
+  port: Number(process.env.DB_PORT) || 3306,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS ?? "",
+  database: process.env.DB_NAME,
+  timezone: "Z",
+  ...(process.env.DB_SSL === "true" ? { ssl: { rejectUnauthorized: true } } : {}),
+});
 try {
   const hash = await hashPassword(password);
   const [rows] = await db.query("SELECT id, role FROM users WHERE email = ?", [email]);

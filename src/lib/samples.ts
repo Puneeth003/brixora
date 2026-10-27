@@ -1,4 +1,4 @@
-// Demo listings shown when DATABASE_URL isn't set (local preview). The same data is in
+// Demo listings shown when the database isn't configured (DB_* unset) (local preview). The same data is in
 // db/seed.sql. Images live in public/samples (scripts/generate-samples.mjs).
 import type { PublicProperty } from "./types";
 

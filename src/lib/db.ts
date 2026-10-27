@@ -8,7 +8,9 @@ import mysql, { type Pool, type PoolConnection, type ResultSetHeader, type TypeC
 // Rows come back normalised: DATETIME → ISO string (UTC),
 // DATE → "YYYY-MM-DD", TINYINT(1) → boolean, JSON columns → parsed values.
 
-export const dbConfigured = Boolean(process.env.DATABASE_URL);
+// Connection comes from separate DB_* variables (no URL, so passwords with @ # / etc.
+// need no encoding). DB_HOST and DB_PORT default to localhost:3306.
+export const dbConfigured = Boolean(process.env.DB_USER && process.env.DB_NAME);
 
 // JSON columns, by name. Parsed here so MariaDB (which stores JSON as LONGTEXT) and
 // MySQL behave the same.
@@ -55,18 +57,22 @@ function typeCast(field: TypeCastField, next: () => unknown) {
 const globalForDb = globalThis as unknown as { __brixoraPool?: Pool };
 
 function pool(): Pool {
-  if (!dbConfigured) throw new Error("DATABASE_URL is not set");
+  if (!dbConfigured) throw new Error("Database is not configured (set DB_USER, DB_PASS, DB_NAME)");
   if (!globalForDb.__brixoraPool) {
     const p = mysql.createPool({
-      uri: process.env.DATABASE_URL,
-      connectionLimit: Number(process.env.DATABASE_POOL_SIZE) || 5,
+      host: process.env.DB_HOST || "localhost",
+      port: Number(process.env.DB_PORT) || 3306,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASS ?? "",
+      database: process.env.DB_NAME,
+      connectionLimit: Number(process.env.DB_POOL_SIZE) || 5,
       waitForConnections: true,
       timezone: "Z",
       dateStrings: false,
       charset: "utf8mb4_unicode_ci",
       typeCast,
       enableKeepAlive: true,
-      ...(process.env.DATABASE_SSL === "true" ? { ssl: { rejectUnauthorized: true } } : {}),
+      ...(process.env.DB_SSL === "true" ? { ssl: { rejectUnauthorized: true } } : {}),
     });
     // NOW() and CURRENT_TIMESTAMP must be UTC, matching the values the app writes.
     p.pool.on("connection", (conn) => {
