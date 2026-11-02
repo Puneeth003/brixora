@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { hasOwnerSession, sendLoginCode, verifyLoginCode } from "@/app/(site)/login/actions";
-import { Turnstile } from "@/components/Turnstile";
 
 function toE164(input: string) {
   const d = input.replace(/\D/g, "");
@@ -19,11 +18,9 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
   const [step, setStep] = useState<"checking" | "phone" | "code">("checking");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
-  const [captcha, setCaptcha] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
-  const [captchaKey, setCaptchaKey] = useState(0);
 
   useEffect(() => {
     hasOwnerSession()
@@ -43,10 +40,8 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
     const e164 = toE164(phone);
     if (!e164) return setError("Enter a valid 10-digit Indian mobile number.");
     setBusy(true);
-    const res = await sendLoginCode(e164, captcha).catch(() => ({ ok: false as const, error: "Could not send the code. Please try again." }));
+    const res = await sendLoginCode(e164).catch(() => ({ ok: false as const, error: "Could not send the code. Please try again." }));
     setBusy(false);
-    setCaptcha("");
-    setCaptchaKey((k) => k + 1);
     if (!res.ok) return setError(res.error);
     setStep("code");
     setCooldown(30);
@@ -90,9 +85,8 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
             />
           </div>
         </div>
-        <Turnstile onToken={setCaptcha} resetKey={captchaKey} />
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <button className="btn-primary w-full" disabled={busy || !captcha}>
+        <button className="btn-primary w-full" disabled={busy}>
           {busy ? "Sending…" : "Send code on WhatsApp"}
         </button>
       </form>

@@ -2,7 +2,7 @@
 
 Property listing platform for a brokerage. Owners submit with phone + WhatsApp OTP, admin reviews and publishes, and every enquiry goes to the brokerage. Enquiries land in a built-in CRM worked by admins and agents. Visitors and owners can keep a member account to save listings and read replies. Full spec: [SPEC.md](SPEC.md).
 
-Stack: Next.js 16 (App Router, Cache Components) · MySQL 8 / MariaDB on Hostinger (`mysql2`) · WhatsApp Cloud API · SMTP email (nodemailer) · Cloudflare Turnstile · sharp. Auth, sessions, file storage and scheduled jobs are built into the app; there are no third-party backend services.
+Stack: Next.js 16 (App Router, Cache Components) · MySQL 8 / MariaDB on Hostinger (`mysql2`) · WhatsApp Cloud API · SMTP email (nodemailer) · sharp. Auth, sessions, file storage and scheduled jobs are built into the app; there are no third-party backend services.
 
 ## Layout
 
@@ -55,7 +55,7 @@ The admin panel has its own look (floating dark sidebar, Nunito Sans). Its theme
   - Staff change their own password at `/admin/profile` (current password required; other sessions are signed out).
 - **Member OTP** (owners and visitors share one flow).
   - The 6-digit code goes out on WhatsApp and is stored only as an HMAC. It expires in 5 minutes, is single-use, and allows at most 5 tries.
-  - Sends are limited to 3 per number per hour and guarded by Turnstile.
+  - Sends are limited to 3 per number per hour (plus a per-IP limit).
   - Admin can block a member (Admin → Members); blocked accounts can't sign in. Members see only their own listings, enquiries and saved properties.
 - **Rate limits** (`auth_attempts`): 5 failed staff passwords or TOTP codes per 15 minutes per account (wider per IP), 10 OTP failures per hour, plus the reset limits above.
 - **Uploads** are re-encoded by sharp. Public copies get random names, originals are served only to the admin, and storage keys are validated against a strict pattern.
@@ -129,7 +129,6 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
    - Set `BROKERAGE_ENQUIRY_WHATSAPP` to a different number (e.g. the manager's). The connected number can't forward enquiries to itself.
    - Open the app on the phone at least every ~14 days, or Meta disconnects the API. While connected: API throughput is 20 messages/second; broadcast lists, disappearing/view-once messages, greeting/away messages and labels stop working in the app.
    - The connected number overrides `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID`. Disconnect falls back to them.
-10. **Turnstile:** set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`. Production refuses OTP sends and enquiries without them.
 
 If `sharp` fails to install on the host, ask Hostinger for a Node build with libvips, or move image processing to a small separate service.
 

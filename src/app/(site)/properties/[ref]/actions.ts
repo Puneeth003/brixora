@@ -2,9 +2,8 @@
 
 import { z } from "zod";
 import { db, uuid } from "@/lib/db";
-import { clientIp, getOwner } from "@/lib/auth";
+import { getOwner, recordAttempt, tooManyAttempts } from "@/lib/auth";
 import { recordEnquiryInCrm } from "@/lib/crm";
-import { verifyTurnstile } from "@/lib/turnstile";
 import { brokeragePhone, notify } from "@/lib/whatsapp";
 import { displayPhone, normalizeIndianPhone } from "@/lib/format";
 import { propertyUrl } from "@/lib/site";
@@ -33,8 +32,11 @@ export async function submitEnquiry(_prev: ActionState, formData: FormData): Pro
   const phone = normalizeIndianPhone(parsed.data.phone);
   if (!phone) return { ok: false, error: "Please enter a valid 10-digit Indian mobile number." };
 
-  const human = await verifyTurnstile(formData.get("cf-turnstile-response")?.toString(), await clientIp());
-  if (!human) return { ok: false, error: "Please complete the verification and try again." };
+  // Spam guard: a few enquiries per number per hour (wider budget per IP).
+  if (await tooManyAttempts("enquiry", phone, 5, 60, { countSuccess: true })) {
+    return { ok: false, error: "You've sent several enquiries already. We'll call you shortly, or please call us directly." };
+  }
+  await recordAttempt("enquiry", phone, true);
 
   const property = await db.one<{ id: string; reference_no: string; listing_type: "sale" | "rent" }>(
     "SELECT id, reference_no, listing_type FROM public_properties WHERE reference_no = ?",

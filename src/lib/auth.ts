@@ -158,7 +158,8 @@ export type AttemptKind =
   | "otp_verify"
   | "reset_send"
   | "reset_verify"
-  | "password_change";
+  | "password_change"
+  | "enquiry";
 
 export async function recordAttempt(kind: AttemptKind, identifier: string, success: boolean) {
   await db.insert("auth_attempts", { kind, identifier, ip: await clientIp(), success });

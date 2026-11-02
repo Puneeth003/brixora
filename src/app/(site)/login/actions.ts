@@ -1,10 +1,9 @@
 "use server";
 
-import { clientIp, getOwner, recordAttempt, startSession, tooManyAttempts } from "@/lib/auth";
+import { getOwner, recordAttempt, startSession, tooManyAttempts } from "@/lib/auth";
 import { db, dbConfigured, transaction, uuid } from "@/lib/db";
 import { hmac, randomDigits, safeEqual } from "@/lib/crypto";
 import { normalizeIndianPhone } from "@/lib/format";
-import { verifyTurnstile } from "@/lib/turnstile";
 import { recentOtpCount, sendOtp } from "@/lib/whatsapp";
 
 // Owner sign-in: phone → 6-digit code on WhatsApp → session cookie.
@@ -21,14 +20,11 @@ export async function hasOwnerSession() {
   return Boolean(await getOwner());
 }
 
-export async function sendLoginCode(rawPhone: string, captchaToken: string): Promise<Result> {
+export async function sendLoginCode(rawPhone: string): Promise<Result> {
   if (!dbConfigured) return { ok: false, error: "Sign-in isn't configured yet." };
   const phone = normalizeIndianPhone(rawPhone);
   if (!phone) return { ok: false, error: "Enter a valid 10-digit Indian mobile number." };
 
-  if (!(await verifyTurnstile(captchaToken, await clientIp()))) {
-    return { ok: false, error: "Please complete the verification and try again." };
-  }
   if ((await recentOtpCount(phone)) >= OTP_PER_HOUR || (await tooManyAttempts("otp_send", phone, OTP_PER_HOUR * 2, 60, { countSuccess: true }))) {
     return { ok: false, error: "Too many codes requested. Please try again in an hour." };
   }

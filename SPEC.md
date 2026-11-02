@@ -20,9 +20,9 @@ A listing platform for a real estate brokerage / channel partner. Owners and bui
 - **Hostinger Managed Node.js Web App** – hosting; deploy from GitHub; domain, SSL, CDN included
 - Hostinger MySQL – data store; auth (DB sessions, WhatsApp OTP, admin TOTP), file storage (disk under `UPLOAD_DIR`), WhatsApp sending/webhook and the daily expiry job all run inside the Next.js app
 - **WhatsApp Business Platform** – Meta Cloud API directly, or via a BSP (Interakt / WATI / AiSensy). One approved **authentication** template for OTP; one approved **utility** template per notification type (§12).
-- Cloudflare Turnstile – spam protection on post and enquiry forms
+- Spam protection: hidden honeypot field and per-number / per-IP rate limits on login codes and enquiries
 - Images – resize on upload (max ~1600px, WebP) and watermark with brokerage logo using `sharp`; keep original privately. If `sharp` won't build on Hostinger, move processing to a small separate service.
-- Env vars (database, auth secret, WhatsApp token/phone-number ID, Turnstile) set in Hostinger's panel; never committed
+- Env vars (database, auth secret, WhatsApp token/phone-number ID) set in Hostinger's panel; never committed
 - SMTP email (nodemailer; Hostinger mailbox) – staff password-reset codes, "password changed" notices and agent welcome emails. Optional later: a backup channel for enquiries if WhatsApp delivery fails
 
 ## 4. Public site
@@ -82,13 +82,13 @@ Rules:
 6. Logged in `activity_log`
 
 ## 9. Enquiries
-Form: name, phone, message + Turnstile. Submitted to a server route that verifies the Turnstile token server-side, then saves to `enquiries` (service role) with property reference → forwarded immediately to the brokerage WhatsApp number (utility template with name, phone, message, listing link). Failed forwards are flagged and retried. Owner is never notified.
+Form: name, phone, message (plus a hidden honeypot field). Submitted to a server action that rate-limits by phone and IP, then saves to `enquiries` (service role) with property reference → forwarded immediately to the brokerage WhatsApp number (utility template with name, phone, message, listing link). Failed forwards are flagged and retried. Owner is never notified.
 
 ## 10. Messaging (WhatsApp)
 - All outbound messages are **template messages** sent server-side (Next.js server), never from the browser
 - Every send is written to `messages` first, then sent; delivery status updated via the WhatsApp status webhook
 - OTP: server action generates the code → authentication template to the owner's number (code stored only as an HMAC)
-- Rate limits: max 3 OTPs per number per hour, 5 tries per code, Turnstile on send; admin login/TOTP lockouts
+- Rate limits: max 3 OTPs per number per hour, 5 tries per code, per-IP send limit; admin login/TOTP lockouts
 - Opt-out: owners can reply STOP; flag `users.wa_opt_out` and suppress non-essential messages (OTP and rejections still go)
 
 ## 11. Data model
@@ -114,7 +114,7 @@ Optional: periodic "your listing is receiving interest" message, no details.
 
 ## 13. Access rules
 - The MySQL user is server-only; every page, server action and route handler authorises the caller before querying.
-- Anonymous: reads `public_properties` and `public_images` only. Enquiries go through a server action with Turnstile (§9).
+- Anonymous: reads `public_properties` and `public_images` only. Enquiries go through a rate-limited server action (§9).
 - Owner (phone-verified session): reads own properties (owner-safe columns) and own `change_requests` only. Submissions and change requests go through server actions that check the session and ownership and write only whitelisted fields; `status`, `owner_id`, `reference_no`, `featured`, `approved_at`, `expires_at`, etc. are set server-side.
 - Member: additionally reads own enquiries, their `enquiry_messages` and own `saved_properties`. Blocked members (`is_active = 0`) can't sign in.
 - Agent: CRM pages only (`requireStaff`); clients, timelines and enquiry threads restricted to clients assigned to them. Admin-only pages use `requireAdmin`.
@@ -166,7 +166,7 @@ One phase at a time; within a phase, one task at a time.
 
 **Phase 1 – Core loop**
 7. Public listings page with filters (reads `public_properties`)
-8. Property detail page + enquiry form with Turnstile + WhatsApp forward to brokerage
+8. Property detail page + enquiry form + WhatsApp forward to brokerage
 9. Post-property flow: upload, resize, watermark, phone + WhatsApp OTP, reference number
 10. Admin submissions queue + review screen with auto-scan and checklist + approve/reject
 11. Owner WhatsApp notifications: received / approved / rejected

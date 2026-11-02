@@ -242,7 +242,6 @@ async function SecuritySection() {
           <StatusRow label="Two-factor authentication" on={adminMfaRequired} detail="ADMIN_2FA" />
           <StatusRow label="Email" on={mailConfigured} detail="SMTP_HOST" />
           <StatusRow label="WhatsApp" on={Boolean(await whatsappConnection())} detail="Settings → WhatsApp, or WHATSAPP_TOKEN" />
-          <StatusRow label="Turnstile (bot protection)" on={Boolean(process.env.TURNSTILE_SECRET_KEY)} detail="TURNSTILE_SECRET_KEY" />
         </ul>
       </Card>
       <Card title="Staff sessions" description={`${sessions} active staff ${sessions === 1 ? "session" : "sessions"}.`}>

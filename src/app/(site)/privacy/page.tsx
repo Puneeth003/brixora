@@ -23,7 +23,7 @@ export default function PrivacyPage() {
           <strong>Enquiries:</strong> your name, mobile number and message when you ask about a property.
         </li>
         <li>
-          <strong>Technical data:</strong> standard server logs and an anti-spam check by Cloudflare Turnstile.
+          <strong>Technical data:</strong> standard server logs.
         </li>
       </ul>
 
@@ -52,8 +52,8 @@ export default function PrivacyPage() {
 
       <h2>Who we share it with</h2>
       <p>
-        We use trusted service providers to run the site: Hostinger (hosting, database and photo storage), Meta
-        (WhatsApp messaging) and Cloudflare (spam protection). They process data only to provide these services. We do not sell
+        We use trusted service providers to run the site: Hostinger (hosting, database and photo storage) and
+        Meta (WhatsApp messaging). They process data only to provide these services. We do not sell
         your data.
       </p>
 

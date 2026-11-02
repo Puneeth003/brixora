@@ -1,12 +1,10 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState } from "react";
 import { submitEnquiry } from "@/app/(site)/properties/[ref]/actions";
-import { Turnstile } from "@/components/Turnstile";
 
 export function EnquiryForm({ refNo }: { refNo: string }) {
   const [state, action, pending] = useActionState(submitEnquiry, null);
-  const [token, setToken] = useState("");
 
   if (state?.ok) {
     return (
@@ -60,9 +58,8 @@ export function EnquiryForm({ refNo }: { refNo: string }) {
           placeholder="I'm interested in this property. Please call me."
         />
       </div>
-      <Turnstile onToken={setToken} resetKey={state} />
       {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
-      <button className="btn-primary w-full" disabled={pending || !token}>
+      <button className="btn-primary w-full" disabled={pending}>
         {pending ? "Sending…" : "Request a call back"}
       </button>
       <p className="text-xs text-zinc-500">Your details go only to our team, never to the owner.</p>
