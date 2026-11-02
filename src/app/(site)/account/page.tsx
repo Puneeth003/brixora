@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getOwner } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { unreadReplies } from "@/lib/member";
-import { ManageLogin } from "@/components/public/ManageLogin";
 import { AccountShell } from "@/components/account/AccountShell";
 import { ProfileForm } from "@/components/account/AccountForms";
 
@@ -22,9 +22,7 @@ export default function AccountPage() {
 
 async function Content() {
   const member = await getOwner();
-  if (!member) {
-    return <ManageLogin next="/account" title="Sign in" />;
-  }
+  if (!member) redirect("/login?next=/account");
   const [me, enquiries, unread, listings, live, saved] = await Promise.all([
     db.one<{ email: string | null }>("SELECT email FROM users WHERE id = ?", [member.id]),
     db.count("SELECT COUNT(*) FROM enquiries WHERE user_id = ?", [member.id]),

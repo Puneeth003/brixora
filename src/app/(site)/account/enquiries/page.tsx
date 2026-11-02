@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getOwner } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { unreadReplies } from "@/lib/member";
 import { formatDateTime, formatPrice } from "@/lib/format";
 import { site } from "@/lib/site";
-import { ManageLogin } from "@/components/public/ManageLogin";
 import { AccountShell } from "@/components/account/AccountShell";
 import { MarkRepliesRead, MessageForm } from "@/components/account/AccountForms";
 import type { EnquiryMessage, ListingType } from "@/lib/types";
@@ -36,7 +36,7 @@ type Row = {
 
 async function Content() {
   const member = await getOwner();
-  if (!member) return <ManageLogin next="/account/enquiries" title="Sign in" />;
+  if (!member) redirect("/login?next=/account/enquiries");
 
   const [enquiries, unread] = await Promise.all([
     db.all<Row>(

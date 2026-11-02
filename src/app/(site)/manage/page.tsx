@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getOwner } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { MY_PROPERTY_SELECT } from "@/lib/owner";
 import { formatDate, formatPrice, displayPhone } from "@/lib/format";
 import { publicImageUrl } from "@/lib/site";
-import { ManageLogin } from "@/components/public/ManageLogin";
 import { PropertyStatusBadge } from "@/components/StatusBadge";
 import type { MyProperty } from "@/lib/types";
 import { signOut } from "./actions";
@@ -28,7 +28,7 @@ async function Content({ searchParams }: Pick<PageProps<"/manage">, "searchParam
   const owner = await getOwner();
   if (!owner) {
     const { next } = await searchParams;
-    return <ManageLogin next={typeof next === "string" ? next : undefined} />;
+    redirect(`/login?next=${encodeURIComponent(typeof next === "string" && next.startsWith("/manage") ? next : "/manage")}`);
   }
 
   const [list, requests] = await Promise.all([

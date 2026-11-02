@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getOwner } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { unreadReplies } from "@/lib/member";
-import { ManageLogin } from "@/components/public/ManageLogin";
 import { AccountShell } from "@/components/account/AccountShell";
 import { PropertyCard } from "@/components/public/PropertyCard";
 import type { ListingCard } from "@/lib/queries";
@@ -23,7 +23,7 @@ export default function SavedPage() {
 
 async function Content() {
   const member = await getOwner();
-  if (!member) return <ManageLogin next="/account/saved" title="Sign in" />;
+  if (!member) redirect("/login?next=/account/saved");
   const [items, unread] = await Promise.all([
     // Only live listings; saved ones that sold or expired drop out.
     db.all<ListingCard>(
