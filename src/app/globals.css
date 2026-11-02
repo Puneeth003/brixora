@@ -25,9 +25,20 @@
   --color-ink: #10201a;
 }
 
+/* Phones: no rubber-band bounce past the top/bottom of the page. Where a browser still
+   bounces, the area revealed matches the edge: white above the header, the footer's dark
+   green below it (and the dark frame in the admin panel), never a white strip. */
+html {
+  background: linear-gradient(to bottom, #ffffff 50%, var(--color-ink) 50%);
+  overscroll-behavior-y: none;
+}
+html:has(.admin-frame) {
+  background: #17181b;
+}
 body {
   background: #f7f8f5;
   color: var(--color-ink);
+  overscroll-behavior-y: none;
 }
 
 @keyframes dropdown-in {
