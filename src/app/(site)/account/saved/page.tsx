@@ -23,7 +23,7 @@ export default function SavedPage() {
 
 async function Content() {
   const member = await getOwner();
-  if (!member) return <ManageLogin next="/account/saved" title="Sign in to see your shortlist" />;
+  if (!member) return <ManageLogin next="/account/saved" title="Sign in" />;
   const [items, unread] = await Promise.all([
     // Only live listings; saved ones that sold or expired drop out.
     db.all<ListingCard>(

@@ -23,7 +23,7 @@ export default function AccountPage() {
 async function Content() {
   const member = await getOwner();
   if (!member) {
-    return <ManageLogin next="/account" title="Sign in or create an account" />;
+    return <ManageLogin next="/account" title="Sign in" />;
   }
   const [me, enquiries, unread, listings, live, saved] = await Promise.all([
     db.one<{ email: string | null }>("SELECT email FROM users WHERE id = ?", [member.id]),

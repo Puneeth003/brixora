@@ -36,7 +36,7 @@ type Row = {
 
 async function Content() {
   const member = await getOwner();
-  if (!member) return <ManageLogin next="/account/enquiries" title="Sign in to see your enquiries" />;
+  if (!member) return <ManageLogin next="/account/enquiries" title="Sign in" />;
 
   const [enquiries, unread] = await Promise.all([
     db.all<Row>(

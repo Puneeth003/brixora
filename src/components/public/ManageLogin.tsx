@@ -16,15 +16,11 @@ export function ManageLogin({ next, title = "Manage my listing" }: { next?: stri
   return (
     <div className="card mx-auto max-w-md p-6">
       <h1 className="text-xl font-semibold">{title}</h1>
-      <p className="mt-1 mb-5 text-sm text-zinc-500">
-        Sign in with your WhatsApp number. New here? The same code creates your account, so you can follow your
-        enquiries, listings and saved properties.
-      </p>
+      <p className="mt-1 mb-5 text-sm text-zinc-500">Use your WhatsApp number. New here? We&apos;ll create your account.</p>
       <PhoneOtp onVerified={onVerified} />
-      <p className="mt-5 border-t border-zinc-100 pt-4 text-center text-sm text-zinc-500">
-        Agent, broker or staff?{" "}
-        <Link href="/admin/login" className="font-medium text-brand-700 hover:underline">
-          Sign in here
+      <p className="mt-4 text-center text-sm">
+        <Link href="/admin/login" className="text-zinc-500 hover:text-brand-700 hover:underline">
+          Staff login
         </Link>
       </p>
     </div>

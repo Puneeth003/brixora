@@ -23,5 +23,5 @@ async function Content({ searchParams }: Pick<PageProps<"/login">, "searchParams
   const target = typeof next === "string" && SAFE_NEXT.test(next) ? next : "/account";
   // Already signed in: go straight on.
   if (await getOwner()) redirect(target);
-  return <ManageLogin next={target} title="Sign in or create an account" />;
+  return <ManageLogin next={target} title="Sign in" />;
 }
