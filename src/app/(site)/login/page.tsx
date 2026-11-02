@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getOwner } from "@/lib/auth";
@@ -13,12 +12,6 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
       <Suspense fallback={<div className="card h-72 animate-pulse bg-zinc-50" />}>
         <Content searchParams={searchParams} />
       </Suspense>
-      <p className="mt-6 text-center text-sm text-zinc-500">
-        Staff?{" "}
-        <Link href="/admin/login" className="font-medium text-brand-700 hover:underline">
-          Staff login
-        </Link>
-      </p>
     </div>
   );
 }

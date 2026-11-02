@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { PhoneOtp } from "@/components/PhoneOtp";
@@ -20,6 +21,12 @@ export function ManageLogin({ next, title = "Manage my listing" }: { next?: stri
         enquiries, listings and saved properties.
       </p>
       <PhoneOtp onVerified={onVerified} />
+      <p className="mt-5 border-t border-zinc-100 pt-4 text-center text-sm text-zinc-500">
+        Agent, broker or staff?{" "}
+        <Link href="/admin/login" className="font-medium text-brand-700 hover:underline">
+          Sign in here
+        </Link>
+      </p>
     </div>
   );
 }
