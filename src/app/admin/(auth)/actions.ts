@@ -2,7 +2,7 @@
 
 import { adminMfaRequired, checkStaff, markSessionMfaVerified, recordAttempt, startSession, tooManyAttempts } from "@/lib/auth";
 import { db, dbConfigured, transaction, uuid } from "@/lib/db";
-import { decrypt, encrypt, hashPassword, hmac, newTotpSecret, randomDigits, randomToken, safeEqual, sha256, verifyPassword, verifyTotp } from "@/lib/crypto";
+import { authSecretConfigured, encrypt, hashPassword, hmac, newTotpSecret, randomDigits, randomToken, safeEqual, sha256, tryDecrypt, verifyPassword, verifyTotp } from "@/lib/crypto";
 import { passwordChangedEmail, passwordResetEmail, sendMail } from "@/lib/mail";
 import { passwordProblem } from "@/lib/password";
 
@@ -43,6 +43,9 @@ export async function adminLogin(rawEmail: string, password: string): Promise<Lo
     return { ok: true, next: "/admin" };
   }
 
+  if (!authSecretConfigured()) {
+    return { ok: false, error: "Two-factor sign-in isn't set up on the server (AUTH_SECRET is missing). Ask the site owner." };
+  }
   // First sign-in: create the TOTP secret the MFA page will show as a QR code.
   if (!user.totp_secret) {
     await db.update("users", { totp_secret: encrypt(newTotpSecret()), totp_enabled: false }, "id = ?", [user.id]);
@@ -65,7 +68,9 @@ export async function verifyAdminTotp(code: string): Promise<Result> {
   );
   if (!user?.totp_secret) return { ok: false, error: "Please sign in again." };
 
-  const step = verifyTotp(decrypt(user.totp_secret), String(code).trim());
+  const secret = tryDecrypt(user.totp_secret);
+  if (!secret) return { ok: false, error: "Your two-factor setup can't be read on this server. Ask the site owner to reset it." };
+  const step = verifyTotp(secret, String(code).trim());
   // Each code works once, even within its 30-second window.
   const ok = step !== null && step > (user.totp_last_step ?? -1);
   await recordAttempt("admin_totp", check.userId, ok);

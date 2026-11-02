@@ -74,6 +74,20 @@ export function encrypt(plain: string) {
   return ["v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), data.toString("base64url")].join(".");
 }
 
+/** True when AUTH_SECRET is set and long enough (encryption and code hashing need it). */
+export function authSecretConfigured() {
+  return (process.env.AUTH_SECRET ?? "").length >= 32;
+}
+
+/** decrypt(), or null when the value can't be read (e.g. AUTH_SECRET changed). */
+export function tryDecrypt(sealed: string) {
+  try {
+    return decrypt(sealed);
+  } catch {
+    return null;
+  }
+}
+
 export function decrypt(sealed: string) {
   const [v, iv, tag, data] = sealed.split(".");
   if (v !== "v1") throw new Error("unknown ciphertext version");
