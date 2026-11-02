@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PasswordInput } from "@/components/admin/PasswordInput";
 import { adminLogin } from "../actions";
 
 export default function AdminLoginPage() {
@@ -38,23 +39,24 @@ export default function AdminLoginPage() {
         <input id="email" type="email" autoComplete="username" required className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
       </div>
       <div>
-        <div className="flex items-baseline justify-between">
-          <label className="label" htmlFor="password">
-            Password
-          </label>
-          <Link href={`/admin/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`} className="mb-1.5 text-xs text-brand-700 hover:underline">
-            Forgot password?
-          </Link>
-        </div>
-        <input
+        <label className="label" htmlFor="password">
+          Password
+        </label>
+        <PasswordInput
           id="password"
-          type="password"
           autoComplete="current-password"
           required
-          className="input"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+        <div className="mt-2 flex justify-end">
+          <Link
+            href={`/admin/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`}
+            className="text-sm font-bold text-[var(--brand)] hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
       </div>
       {error && (
         <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">

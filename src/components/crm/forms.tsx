@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordInput } from "@/components/admin/PasswordInput";
 import { useActionState, useState } from "react";
 import { addClientActivity, changeClientStatus, changeOwnPassword, replyToEnquiry, saveAgent, saveClient } from "@/app/admin/crm-actions";
 import { ACTIVITY_TYPES, AGENT_TYPES, CLIENT_SOURCES, CLIENT_STATUSES, CLIENT_TYPES } from "@/lib/crm-constants";
@@ -317,7 +318,7 @@ export function AgentForm({ agent, mailReady }: { agent?: Agent; mailReady: bool
         <input name="commission_pct" type="number" step="0.01" min={0} max={100} defaultValue={agent?.commission_pct ?? ""} className="input" />
       </Field>
       <Field label={agent ? "Set a new password (optional)" : "Initial password (optional)"}>
-        <input name="password" type="password" autoComplete="new-password" minLength={12} className="input" placeholder="12+ characters" />
+        <PasswordInput name="password" autoComplete="new-password" minLength={12} placeholder="12+ characters" />
       </Field>
       <Field label="Notes">
         <input name="notes" defaultValue={agent?.notes ?? ""} className="input" />
@@ -348,13 +349,13 @@ export function ChangePasswordForm() {
   return (
     <form action={action} className="max-w-sm space-y-3">
       <Field label="Current password">
-        <input name="current" type="password" autoComplete="current-password" required className="input" />
+        <PasswordInput name="current" autoComplete="current-password" required />
       </Field>
       <Field label="New password">
-        <input name="password" type="password" autoComplete="new-password" minLength={12} required className="input" />
+        <PasswordInput name="password" autoComplete="new-password" minLength={12} required />
       </Field>
       <Field label="Confirm new password">
-        <input name="confirm" type="password" autoComplete="new-password" required className="input" />
+        <PasswordInput name="confirm" autoComplete="new-password" required />
       </Field>
       <p className="text-xs text-zinc-500">At least 12 characters. Changing it signs you out everywhere, including here.</p>
       <button className="btn-primary" disabled={pending}>

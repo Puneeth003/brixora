@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordInput } from "@/components/admin/PasswordInput";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { requestPasswordReset, resetPassword, verifyResetCode } from "../actions";
@@ -226,13 +227,11 @@ export function ForgotPasswordForm({ initialEmail }: { initialEmail: string }) {
             <label className="label" htmlFor="fp-new">
               New password
             </label>
-            <input
+            <PasswordInput
               id="fp-new"
-              type="password"
               autoComplete="new-password"
               minLength={12}
               required
-              className="input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
@@ -243,12 +242,10 @@ export function ForgotPasswordForm({ initialEmail }: { initialEmail: string }) {
             <label className="label" htmlFor="fp-confirm">
               Confirm password
             </label>
-            <input
+            <PasswordInput
               id="fp-confirm"
-              type="password"
               autoComplete="new-password"
               required
-              className="input"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
             />
