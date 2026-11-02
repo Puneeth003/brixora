@@ -11,7 +11,7 @@
     "db:seed-sql": "node scripts/generate-seed.mjs"
   },
   "dependencies": {
-    "@tailwindcss/turbopack": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20.19.43",
     "@types/nodemailer": "^8.0.2",
     "@types/qrcode": "^1.5.6",

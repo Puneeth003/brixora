@@ -13,14 +13,6 @@ const nextConfig: NextConfig = {
     qualities: [75, 90],
     // Listing photos are served by this app at /media/… (see src/app/media).
   },
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
 };
 
 export default nextConfig;
