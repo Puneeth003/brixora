@@ -1,4 +1,5 @@
 import "server-only";
+import { decrypt } from "./crypto";
 import { db, uuid } from "./db";
 
 // WhatsApp Cloud API (Meta) template sender. See SPEC.md §10, §12.
@@ -36,11 +37,54 @@ export function brokeragePhone() {
   return (process.env.BROKERAGE_ENQUIRY_WHATSAPP || process.env.NEXT_PUBLIC_BROKERAGE_WHATSAPP || "").replace(/\D/g, "");
 }
 
-async function sendTemplate(to: string, template: string, params: string[]): Promise<SendResult> {
-  const token = process.env.WHATSAPP_TOKEN;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+export const graphVersion = () => process.env.WHATSAPP_API_VERSION || "v26.0";
 
-  if (!token || !phoneNumberId) {
+export type WhatsAppConnection = {
+  token: string;
+  phoneNumberId: string;
+  wabaId: string | null;
+  displayPhone: string | null;
+  verifiedName: string | null;
+  connectedAt: string | null;
+  source: "connected" | "env";
+};
+
+/**
+ * The number messages go out from: the one connected in Settings → WhatsApp (Embedded
+ * Signup, coexistence with the WhatsApp Business app) if any, else WHATSAPP_TOKEN /
+ * WHATSAPP_PHONE_NUMBER_ID.
+ */
+export async function whatsappConnection(): Promise<WhatsAppConnection | null> {
+  const rows = await db.all<{ name: string; value: string }>("SELECT name, value FROM app_config WHERE name LIKE 'wa\\_%'");
+  const get = (name: string) => rows.find((r) => r.name === name)?.value || null;
+  const sealed = get("wa_token");
+  const phoneNumberId = get("wa_phone_number_id");
+  if (sealed && phoneNumberId) {
+    try {
+      return {
+        token: decrypt(sealed),
+        phoneNumberId,
+        wabaId: get("wa_waba_id"),
+        displayPhone: get("wa_display_phone"),
+        verifiedName: get("wa_verified_name"),
+        connectedAt: get("wa_connected_at"),
+        source: "connected",
+      };
+    } catch (e) {
+      // AUTH_SECRET changed: the stored token can't be read. Fall back to env.
+      console.error("[whatsapp] stored token can't be decrypted", e);
+    }
+  }
+  const token = process.env.WHATSAPP_TOKEN;
+  const envPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !envPhoneId) return null;
+  return { token, phoneNumberId: envPhoneId, wabaId: null, displayPhone: null, verifiedName: null, connectedAt: null, source: "env" };
+}
+
+async function sendTemplate(to: string, template: string, params: string[]): Promise<SendResult> {
+  const conn = await whatsappConnection();
+
+  if (!conn) {
     if (process.env.NODE_ENV === "production") return { ok: false, error: "WhatsApp is not configured" };
     // Dev mode: no WhatsApp credentials yet. Log instead of sending.
     console.log(`[whatsapp:dev] to=${to} template=${template} params=${JSON.stringify(params)}`);
@@ -56,13 +100,16 @@ async function sendTemplate(to: string, template: string, params: string[]): Pro
     components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: params[0] }] });
   }
 
-  const version = process.env.WHATSAPP_API_VERSION ?? "v23.0";
   const lang = process.env.WHATSAPP_TEMPLATE_LANG ?? "en";
+  // With coexistence the API number is the brokerage's own WhatsApp; it can't message itself.
+  if (conn.displayPhone && normalizePhone(conn.displayPhone) === to) {
+    return { ok: false, error: "Recipient is the connected WhatsApp number itself. Set BROKERAGE_ENQUIRY_WHATSAPP to another number." };
+  }
 
   try {
-    const res = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+    const res = await fetch(`https://graph.facebook.com/${graphVersion()}/${conn.phoneNumberId}/messages`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${conn.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         messaging_product: "whatsapp",
         to,

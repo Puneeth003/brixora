@@ -118,8 +118,17 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
    It expires old listings and clears dead sessions and codes. Public pages already hide expired listings, so a missed run is harmless.
 9. **Meta webhook:**
    - Callback URL: `https://<your domain>/api/whatsapp/webhook`, with the `WHATSAPP_VERIFY_TOKEN` you chose.
-   - Subscribe to `messages`.
+   - Subscribe to `messages`. If you connect the WhatsApp Business app number (step 9a), also subscribe to `account_update`, `smb_message_echoes`, `history` and `smb_app_state_sync`.
    - Submit every template in the table below, including `enquiry_reply` (used when staff answer an enquiry).
+
+9a. **Use the existing WhatsApp Business app number (coexistence):** the team keeps using the WhatsApp Business app on the phone, and the website sends from the same number.
+   - Meta app (developers.facebook.com): add the WhatsApp and Facebook Login for Business products. The app needs `whatsapp_business_management` and `whatsapp_business_messaging`. Meta expects a Tech Provider app with Business Verification, so start that early. App admins and testers can try the flow while the app is in development mode.
+   - Facebook Login for Business → Configurations → create one for "WhatsApp Embedded Signup". Copy its ID into `WHATSAPP_ES_CONFIG_ID`, the app ID into `META_APP_ID` and the app secret into `WHATSAPP_APP_SECRET`. Add your domain to the allowed domains for the JavaScript SDK.
+   - Apply `db/migrations/005_whatsapp_connection.sql`.
+   - Admin → Settings → WhatsApp → **Connect WhatsApp Business app**. Log in with Facebook, choose "Connect your existing WhatsApp Business app", enter the number and confirm in the app on the phone (WhatsApp Business 2.24.17 or later). Contacts and chat history sync starts right after; Meta allows it only within 24 hours of connecting.
+   - Set `BROKERAGE_ENQUIRY_WHATSAPP` to a different number (e.g. the manager's). The connected number can't forward enquiries to itself.
+   - Open the app on the phone at least every ~14 days, or Meta disconnects the API. While connected: API throughput is 20 messages/second; broadcast lists, disappearing/view-once messages, greeting/away messages and labels stop working in the app.
+   - The connected number overrides `WHATSAPP_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID`. Disconnect falls back to them.
 10. **Turnstile:** set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`. Production refuses OTP sends and enquiries without them.
 
 If `sharp` fails to install on the host, ask Hostinger for a Node build with libvips, or move image processing to a small separate service.

@@ -7,7 +7,10 @@ import { site } from "@/lib/site";
 import { PageHeader } from "@/components/admin/ui";
 import { ChangePasswordForm } from "@/components/crm/forms";
 import { signOutAllStaff } from "@/app/admin/settings-actions";
+import { brokeragePhone, graphVersion, normalizePhone, whatsappConnection } from "@/lib/whatsapp";
+import { formatDateTime } from "@/lib/format";
 import { OrganizationForm, ProfileForm } from "./SettingsForms";
+import { WhatsAppConnect } from "./WhatsAppConnect";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -15,6 +18,7 @@ const SECTIONS = [
   { key: "profile", label: "Profile", hint: "Your name, phone and password", adminOnly: false },
   { key: "organization", label: "Organization", hint: "Colours, listings and verification", adminOnly: true },
   { key: "users", label: "Users & roles", hint: "Staff accounts and workload", adminOnly: true },
+  { key: "whatsapp", label: "WhatsApp", hint: "Connect the business number", adminOnly: true },
   { key: "security", label: "Security", hint: "Sign-in and integrations", adminOnly: true },
 ] as const;
 type SectionKey = (typeof SECTIONS)[number]["key"];
@@ -56,6 +60,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
           {active === "profile" && <ProfileSection userId={staff.userId} email={staff.email} />}
           {active === "organization" && <OrganizationSection />}
           {active === "users" && <UsersSection />}
+          {active === "whatsapp" && <WhatsAppSection />}
           {active === "security" && <SecuritySection />}
         </div>
       </div>
@@ -169,6 +174,65 @@ function UsersSection() {
   );
 }
 
+async function WhatsAppSection() {
+  const conn = await whatsappConnection();
+  const appId = process.env.META_APP_ID;
+  const configId = process.env.WHATSAPP_ES_CONFIG_ID;
+  const forwardTo = brokeragePhone();
+  const selfForward = Boolean(conn?.displayPhone && forwardTo && normalizePhone(conn.displayPhone) === forwardTo);
+  const rows = conn
+    ? [
+        { label: "Number", value: conn.displayPhone || "—" },
+        { label: "Business name", value: conn.verifiedName || "—" },
+        { label: "Phone number ID", value: conn.phoneNumberId },
+        { label: "WhatsApp Business Account ID", value: conn.wabaId || "—" },
+        { label: "Connected", value: conn.source === "env" ? "From WHATSAPP_TOKEN (environment)" : conn.connectedAt ? formatDateTime(conn.connectedAt) : "—" },
+      ]
+    : [];
+  return (
+    <>
+      <Card
+        title="WhatsApp Business"
+        description="Connect the brokerage's existing WhatsApp Business app number. Website messages (login codes, listing updates, enquiry replies) go out from it, and the team keeps chatting in the app on the phone."
+      >
+        {conn ? (
+          <dl className="mb-5 grid gap-4 sm:grid-cols-2">
+            {rows.map((r) => (
+              <div key={r.label}>
+                <dt className="label">{r.label}</dt>
+                <dd className="break-all text-sm font-semibold text-[var(--s-text)]">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="mb-5 text-sm text-[var(--s-muted)]">Not connected. Messages are logged but not sent.</p>
+        )}
+        {appId && configId ? (
+          <WhatsAppConnect appId={appId} configId={configId} version={graphVersion()} connected={conn?.source === "connected"} />
+        ) : (
+          <p className="text-sm text-[var(--s-text-2)]">
+            Set <code>META_APP_ID</code>, <code>WHATSAPP_ES_CONFIG_ID</code> and <code>WHATSAPP_APP_SECRET</code> to connect from here.
+          </p>
+        )}
+        {selfForward && (
+          <p className="mt-4 rounded-xl bg-[var(--s-seg)] p-3 text-sm text-[var(--s-late)]">
+            Enquiry forwards go to {forwardTo}, which is this connected number. WhatsApp can&apos;t message itself: set BROKERAGE_ENQUIRY_WHATSAPP to
+            another number (for example the manager&apos;s personal WhatsApp).
+          </p>
+        )}
+      </Card>
+      <Card title="Before you connect">
+        <ul className="list-disc space-y-1.5 pl-5 text-sm text-[var(--s-text-2)]">
+          <li>Have the phone with the WhatsApp Business app (latest version) nearby. Meta shows a QR code or prompt to confirm in the app.</li>
+          <li>Open the WhatsApp Business app at least once every 14 days, or Meta disconnects the API.</li>
+          <li>Chats sent from the app and from the website show up in the same conversation on the phone.</li>
+          <li>Chat history can only be imported within 24 hours of connecting, so finish setup in one go.</li>
+        </ul>
+      </Card>
+    </>
+  );
+}
+
 async function SecuritySection() {
   const sessions = await db.count("SELECT COUNT(*) FROM sessions WHERE kind = 'admin' AND expires_at > UTC_TIMESTAMP(3)");
   return (
@@ -177,7 +241,7 @@ async function SecuritySection() {
         <ul className="divide-y divide-[var(--s-border)]">
           <StatusRow label="Two-factor authentication" on={adminMfaRequired} detail="ADMIN_2FA" />
           <StatusRow label="Email" on={mailConfigured} detail="SMTP_HOST" />
-          <StatusRow label="WhatsApp" on={Boolean(process.env.WHATSAPP_TOKEN)} detail="WHATSAPP_TOKEN" />
+          <StatusRow label="WhatsApp" on={Boolean(await whatsappConnection())} detail="Settings → WhatsApp, or WHATSAPP_TOKEN" />
           <StatusRow label="Turnstile (bot protection)" on={Boolean(process.env.TURNSTILE_SECRET_KEY)} detail="TURNSTILE_SECRET_KEY" />
         </ul>
       </Card>

@@ -186,7 +186,7 @@ One phase at a time; within a phase, one task at a time.
 
 ## 19. Do before Phase 0 task 4 (not code — takes days)
 - Meta Business account + business verification
-- A dedicated phone number for the WhatsApp Business API (cannot already be on regular WhatsApp)
+- A phone number for the WhatsApp Business API: either a dedicated number, or the existing WhatsApp Business app number connected with coexistence (Settings → WhatsApp)
 - Decide: Meta Cloud API direct vs a BSP (Interakt / WATI / AiSensy) — BSPs cost a monthly fee but make templates and onboarding easier
 - Submit the templates in §12 for approval; the OTP one must be **authentication** category
 - Set up the display name and profile for the business number
