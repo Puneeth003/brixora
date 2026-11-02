@@ -96,7 +96,7 @@ function Brand({ role }: { role: "admin" | "agent" }) {
   );
 }
 
-/** Desktop: floating sidebar. Phones: a drawer opened from the top bar. */
+/** Desktop: sidebar on the dark frame. Phones: a drawer opened from the top bar. */
 export function AdminSidebar({ role, counts, footer }: { role: "admin" | "agent"; counts: Counts; footer: React.ReactNode }) {
   const sections = sectionsFor(role, counts);
   // The drawer closes itself on navigation (NavList onNavigate).
@@ -104,17 +104,17 @@ export function AdminSidebar({ role, counts, footer }: { role: "admin" | "agent"
 
   return (
     <>
-      <aside className="admin-sidebar fixed top-4 bottom-4 left-4 z-30 hidden w-[264px] flex-col md:flex">
-        <div className="px-3 pt-5 pb-4">
+      <aside className="sticky top-0 hidden h-dvh w-[252px] shrink-0 flex-col text-white md:flex">
+        <div className="px-4 pt-6 pb-5">
           <Brand role={role} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           <NavList sections={sections} />
         </div>
-        <div className="border-t border-white/10 px-3 py-3">{footer}</div>
+        <div className="px-3 pt-2 pb-4">{footer}</div>
       </aside>
 
-      <div className="fixed top-4 left-4 z-30 md:hidden">
+      <div className="fixed top-3 left-3 z-30 md:hidden">
         <button type="button" onClick={() => setOpen(true)} className="admin-chip w-11 justify-center p-0" aria-label="Open menu">
           <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
             <path d="M4 7h16M4 12h16M4 17h16" />
@@ -125,13 +125,13 @@ export function AdminSidebar({ role, counts, footer }: { role: "admin" | "agent"
         <div className="fixed inset-0 z-40 md:hidden">
           <button type="button" className="absolute inset-0 bg-black/45" aria-label="Close menu" onClick={() => setOpen(false)} />
           <aside className="admin-sidebar absolute inset-y-0 left-0 flex w-[280px] flex-col rounded-l-none">
-            <div className="px-3 pt-5 pb-4">
+            <div className="px-4 pt-6 pb-5">
               <Brand role={role} />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
               <NavList sections={sections} onNavigate={() => setOpen(false)} />
             </div>
-            <div className="border-t border-white/10 px-3 py-3">{footer}</div>
+            <div className="px-3 pt-2 pb-4">{footer}</div>
           </aside>
         </div>
       )}
@@ -139,8 +139,8 @@ export function AdminSidebar({ role, counts, footer }: { role: "admin" | "agent"
   );
 }
 
-/** Name + avatar chip with a small menu (password, site, sign out). */
-export function UserMenu({ name, email, role, signOut }: { name: string; email: string; role: string; signOut: React.ReactNode }) {
+/** User card at the foot of the sidebar: avatar, name, status; opens a small menu upwards. */
+export function UserCard({ name, email, role, signOut }: { name: string; email: string; role: string; signOut: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -150,7 +150,7 @@ export function UserMenu({ name, email, role, signOut }: { name: string; email: 
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
   const initials = name
-    .split(/[\s@.]+/)
+    .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0]!.toUpperCase())
@@ -158,23 +158,11 @@ export function UserMenu({ name, email, role, signOut }: { name: string; email: 
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="admin-chip pl-1.5" aria-expanded={open}>
-        <span className="flex size-8 items-center justify-center rounded-full bg-[var(--brand)] text-xs font-extrabold text-white">{initials}</span>
-        <span className="hidden max-w-40 truncate sm:block">{name}</span>
-        <svg viewBox="0 0 24 24" className={`size-4 text-zinc-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
       {open && (
-        <div className="absolute top-[calc(100%+8px)] right-0 z-50 w-60 rounded-2xl bg-white p-1.5 shadow-[0_0_0_1px_var(--s-border),var(--s-shadow-lg)]">
-          <div className="mb-1 border-b border-[var(--s-border)] px-3 pt-2.5 pb-3">
-            <p className="truncate text-sm font-extrabold">{name}</p>
-            <p className="truncate text-xs text-zinc-500">
-              {email} · <span className="capitalize">{role}</span>
-            </p>
-          </div>
+        <div className="absolute right-0 bottom-[calc(100%+8px)] left-0 z-50 rounded-2xl bg-white p-1.5 text-[var(--s-text)] shadow-[0_0_0_1px_var(--s-border),var(--s-shadow-lg)]">
+          <p className="truncate px-3 pt-2 pb-1 text-xs text-zinc-500">{email}</p>
           <Link href="/admin/settings" onClick={() => setOpen(false)} className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-[var(--s-hover)]">
-            Profile & password
+            Profile & settings
           </Link>
           <Link href="/" className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-[var(--s-hover)]">
             View website
@@ -182,6 +170,24 @@ export function UserMenu({ name, email, role, signOut }: { name: string; email: 
           {signOut}
         </div>
       )}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 rounded-2xl border border-white/15 px-3 py-2.5 text-left text-white transition hover:bg-white/5"
+      >
+        <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] text-xs font-extrabold text-[#1c1a14]">
+          {initials}
+          <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-[var(--sidebar-bg)] bg-emerald-400" aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-bold">{name}</span>
+          <span className="block text-xs text-white/55 capitalize">{role} · Active</span>
+        </span>
+        <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-white/50" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+          <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
+        </svg>
+      </button>
     </div>
   );
 }

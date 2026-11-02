@@ -2,25 +2,31 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { requireStaff, type Staff } from "@/lib/auth";
 import { clientScope } from "@/lib/crm";
-import { CLIENT_STATUSES } from "@/lib/crm-constants";
-import { ClientStatusBadge, FollowUp, requirementSummary } from "@/components/crm/ClientBadges";
-import type { Client, Property } from "@/lib/types";
+import { ACTIVITY_TYPES, CLIENT_STATUSES, label } from "@/lib/crm-constants";
+import type { Client, ClientActivityType, Property } from "@/lib/types";
 import { db } from "@/lib/db";
 import { formatDateTime, formatPrice } from "@/lib/format";
-import { daysFromNowIso, istHour, nowMs, startOfMonthIst, startOfTodayIstIso } from "@/lib/time";
-import { Empty, SectionHeading, StatCard } from "@/components/admin/ui";
+import { istHour, nowMs, startOfMonthIst, startOfTodayIstIso } from "@/lib/time";
+import { Empty } from "@/components/admin/ui";
 import { PropertyStatusBadge } from "@/components/StatusBadge";
 
-/** e.g. "Monday, 26 October" in India time. */
-function todayLabel() {
-  return new Date(nowMs()).toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", weekday: "long", day: "numeric", month: "long" });
-}
+// Dashboard: welcome banner, four quick numbers, the client pipeline (donut) and, on
+// the right, "My activity": upcoming follow-ups, site visits and the latest activity.
+// Admins see everything; agents see their own clients and visits.
 
-const LIST_MAX = 6;
+const IST = "Asia/Kolkata";
+const STATUS_HEX: Record<Client["status"], string> = {
+  new: "#3b82f6",
+  contacted: "#6366f1",
+  site_visit: "#8b5cf6",
+  negotiation: "#f59e0b",
+  won: "#10b981",
+  lost: "#a1a1aa",
+};
 
 function greeting() {
   const h = istHour();
-  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Welcome back";
 }
 
 /** "You have 4 listings to review and 4 follow-ups due today." (zero counts are left out) */
@@ -31,124 +37,127 @@ function summarize(items: [number, string, string, string][]) {
   return `You have ${list}.`;
 }
 
-function Welcome({ name, summary, actions }: { name: string | null; summary: string; actions: { href: string; label: string; primary?: boolean }[] }) {
-  return (
-    <section className="admin-hero mb-8">
-      <p className="relative text-sm font-semibold text-white/70">{todayLabel()}</p>
-      <h1 className="relative mt-1 text-[28px] leading-tight font-extrabold tracking-tight sm:text-[32px]">
-        {greeting()}
-        {name ? `, ${name.split(" ")[0]}` : ""}
-      </h1>
-      <p className="relative mt-2 max-w-xl text-[15px] text-white/80">{summary}</p>
-      <div className="relative mt-5 flex flex-wrap gap-2.5">
-        {actions.map((a) => (
-          <Link key={a.href} href={a.href} className="admin-hero-btn" data-primary={a.primary ? "" : undefined}>
-            {a.label}
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
+const initialsOf = (name: string | null | undefined) =>
+  (name ?? "")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("") || "•";
 
 export default async function DashboardPage() {
   const staff = await requireStaff();
   await connection();
+  const isAdmin = staff.role === "admin";
   const crm = await loadCrm(staff);
 
-  if (staff.role !== "admin") {
-    return (
-      <>
-        <Welcome
-          name={staff.name}
-          summary={summarize([
-            [crm.due, "follow-up", "follow-ups", "due today"],
-            [crm.fresh, "new lead", "new leads", "to call"],
-            [crm.unread, "unread message", "unread messages", ""],
-          ])}
-          actions={[
-            { href: "/admin/clients/new", label: "Add client", primary: true },
-            { href: "/admin/calendar", label: "Calendar" },
-            { href: "/admin/inbox", label: "Inbox" },
-          ]}
-        />
-        <div className="s-stats">
-          <StatCard label="Follow-ups due today" value={crm.due} href="/admin/clients?tab=due" tone={crm.due ? "warn" : "default"} />
-          <StatCard label="New leads" value={crm.fresh} href="/admin/clients?tab=new" tone={crm.fresh ? "warn" : "default"} />
-          <StatCard label="Unread messages" value={crm.unread} href="/admin/inbox" tone={crm.unread ? "bad" : "default"} />
-        </div>
-        <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_380px]">
-          <FollowUpList followUps={crm.followUps} now={crm.now} />
-          <div className="space-y-6">
-            <Pipeline byStatus={crm.byStatus} />
-            <Glance
-              rows={[
-                { label: "Open clients", value: crm.openCount, href: "/admin/clients" },
-                { label: "Won this month", value: crm.wonMonth, href: "/admin/clients?tab=won" },
-              ]}
-            />
-          </div>
-        </div>
-      </>
-    );
-  }
-
-  const startOfDay = startOfTodayIstIso();
-  const weekAhead = daysFromNowIso(7);
-
   type QueueRow = Pick<Property, "id" | "reference_no" | "title" | "status" | "price" | "listing_type" | "locality" | "submitted_at">;
-  const [pending, requests, live, enquiriesToday, failed, expiring, queue] = await Promise.all([
-    db.count("SELECT COUNT(*) FROM properties WHERE status IN ('pending', 'under_review')"),
-    db.count("SELECT COUNT(*) FROM change_requests WHERE status = 'pending' AND submitted = 1"),
-    db.count("SELECT COUNT(*) FROM properties WHERE status = 'approved'"),
-    db.count("SELECT COUNT(*) FROM enquiries WHERE created_at >= ?", [startOfDay]),
-    db.count("SELECT COUNT(*) FROM messages WHERE status = 'failed'"),
-    db.count("SELECT COUNT(*) FROM properties WHERE status = 'approved' AND expires_at <= ?", [weekAhead]),
-    db.all<QueueRow>(
-      `SELECT id, reference_no, title, status, price, listing_type, locality, submitted_at FROM properties
-        WHERE status IN ('pending', 'under_review') ORDER BY submitted_at ASC LIMIT 8`,
-    ),
-  ]);
-  const queueShown = queue.slice(0, LIST_MAX);
+  const [pending, live, queue] = isAdmin
+    ? await Promise.all([
+        db.count("SELECT COUNT(*) FROM properties WHERE status IN ('pending', 'under_review')"),
+        db.count("SELECT COUNT(*) FROM properties WHERE status = 'approved'"),
+        db.all<QueueRow>(
+          `SELECT id, reference_no, title, status, price, listing_type, locality, submitted_at FROM properties
+            WHERE status IN ('pending', 'under_review') ORDER BY submitted_at ASC LIMIT 5`,
+        ),
+      ])
+    : [0, 0, [] as QueueRow[]];
+
+  const stats = isAdmin
+    ? [
+        { label: "To review", value: pending, href: "/admin/submissions", icon: ICONS.inbox },
+        { label: "Live listings", value: live, href: "/admin/listings", icon: ICONS.home },
+        { label: "Open clients", value: crm.openCount, href: "/admin/clients", icon: ICONS.users },
+        { label: "Site visits", value: crm.visitsOpen, href: "/admin/verifications", icon: ICONS.shield },
+      ]
+    : [
+        { label: "Due today", value: crm.due, href: "/admin/clients?tab=due", icon: ICONS.clock },
+        { label: "New leads", value: crm.fresh, href: "/admin/clients?tab=new", icon: ICONS.star },
+        { label: "Open clients", value: crm.openCount, href: "/admin/clients", icon: ICONS.users },
+        { label: "Site visits", value: crm.visitsOpen, href: "/admin/verifications", icon: ICONS.shield },
+      ];
 
   return (
-    <>
-      <Welcome
-        name={staff.name}
-        summary={summarize([
-          [pending, "listing", "listings", "to review"],
-          [crm.due, "follow-up", "follow-ups", "due today"],
-          [crm.unread, "unread message", "unread messages", ""],
-        ])}
-        actions={[
-          { href: "/admin/submissions", label: "Review submissions", primary: true },
-          { href: "/admin/clients/new", label: "Add client" },
-          { href: "/admin/reports", label: "Reports" },
-        ]}
-      />
-      <div className="s-stats">
-        <StatCard label="Pending submissions" value={pending} href="/admin/submissions" tone={pending ? "warn" : "default"} />
-        <StatCard label="Follow-ups due today" value={crm.due} href="/admin/clients?tab=due" tone={crm.due ? "warn" : "default"} />
-        <StatCard label="Unread messages" value={crm.unread} href="/admin/inbox" tone={crm.unread ? "bad" : "default"} />
-        <StatCard label="Live listings" value={live} href="/admin/listings" />
-      </div>
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="min-w-0 space-y-6">
+        <h1 className="text-[28px] font-extrabold tracking-tight">Dashboard</h1>
 
-      <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_380px]">
-        <div className="min-w-0 space-y-8">
-          <section>
-            <SectionHeading count={pending}>
-              Review queue <span className="text-sm font-bold tracking-normal text-[var(--s-muted)]">oldest first</span>
-            </SectionHeading>
-            {queueShown.length ? (
-              <ul className="card divide-y divide-[var(--s-border)] overflow-hidden p-0">
-                {queueShown.map((p) => (
+        <section className="admin-hero-gold flex items-center gap-6">
+          <div className="relative min-w-0 flex-1">
+            <h2 className="text-2xl font-extrabold tracking-tight sm:text-[26px]">
+              {greeting()}
+              {staff.name ? `, ${staff.name.split(" ")[0]}` : ""}!
+            </h2>
+            <p className="mt-1.5 max-w-lg text-sm text-white/85">
+              {summarize(
+                isAdmin
+                  ? [
+                      [pending, "listing", "listings", "to review"],
+                      [crm.due, "follow-up", "follow-ups", "due today"],
+                      [crm.unread, "unread message", "unread messages", ""],
+                    ]
+                  : [
+                      [crm.due, "follow-up", "follow-ups", "due today"],
+                      [crm.fresh, "new lead", "new leads", "to call"],
+                      [crm.unread, "unread message", "unread messages", ""],
+                    ],
+              )}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2.5">
+              {(isAdmin
+                ? [
+                    { href: "/admin/submissions", label: "Review submissions" },
+                    { href: "/admin/clients/new", label: "Add client" },
+                  ]
+                : [
+                    { href: "/admin/clients/new", label: "Add client" },
+                    { href: "/admin/calendar", label: "Open calendar" },
+                  ]
+              ).map((a) => (
+                <Link key={a.href} href={a.href} className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-[#1c1a14] shadow-sm transition hover:bg-white/90">
+                  {a.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+          <div className="relative hidden size-28 shrink-0 items-center justify-center rounded-full bg-white/15 ring-4 ring-white/30 sm:flex">
+            <span className="flex size-[88px] items-center justify-center rounded-full bg-white text-3xl font-extrabold text-[var(--accent)]">
+              {initialsOf(staff.name ?? staff.email)}
+            </span>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {stats.map((s) => (
+            <Link key={s.label} href={s.href} className="card flex items-center gap-3.5 p-4 transition hover:shadow-[var(--s-shadow-lg)]">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--accent)_14%,white)] text-[var(--accent)]">
+                {s.icon}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xl leading-tight font-extrabold tabular-nums">{s.value}</span>
+                <span className="block truncate text-xs font-semibold text-[var(--s-muted)]">{s.label}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+
+        <PipelineCard byStatus={crm.byStatus} />
+
+        {isAdmin && (
+          <section className="card p-6">
+            <div className="mb-4 flex items-baseline justify-between">
+              <h2 className="text-lg font-extrabold tracking-tight">Review queue</h2>
+              <Link href="/admin/submissions" className="text-sm font-bold text-[var(--accent)] hover:underline">
+                View all
+              </Link>
+            </div>
+            {queue.length ? (
+              <ul className="-mx-2 divide-y divide-[var(--s-border)]">
+                {queue.map((p) => (
                   <li key={p.id}>
-                    <Link
-                      href={`/admin/properties/${p.id}`}
-                      className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5 transition-colors hover:bg-[var(--s-hover)]"
-                    >
+                    <Link href={`/admin/properties/${p.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl px-2 py-3 hover:bg-[var(--s-hover)]">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-bold text-[var(--s-text)]">{p.title}</p>
+                        <p className="truncate text-sm font-bold">{p.title}</p>
                         <p className="truncate text-xs text-[var(--s-muted)]">
                           <span className="font-mono">{p.reference_no}</span> · {p.locality} · {formatDateTime(p.submitted_at)}
                         </p>
@@ -163,44 +172,73 @@ export default async function DashboardPage() {
               <Empty>Nothing waiting for review.</Empty>
             )}
           </section>
-          <FollowUpList followUps={crm.followUps} now={crm.now} />
-        </div>
-
-        <div className="space-y-6">
-          <Glance
-            rows={[
-              { label: "Change requests pending", value: requests, href: "/admin/requests" },
-              { label: "New leads", value: crm.fresh, href: "/admin/clients?tab=new" },
-              { label: "Open clients", value: crm.openCount, href: "/admin/clients" },
-              { label: "Won this month", value: crm.wonMonth, href: "/admin/clients?tab=won" },
-              { label: "Enquiries today", value: enquiriesToday, href: "/admin/enquiries" },
-              { label: "Expiring within 7 days", value: expiring, href: "/admin/listings?tab=expiring" },
-              { label: "Failed WhatsApp messages", value: failed, href: "/admin/messages?status=failed", bad: true },
-            ]}
-          />
-          <Pipeline byStatus={crm.byStatus} />
-        </div>
+        )}
       </div>
-    </>
+
+      <aside className="min-w-0 space-y-6 rounded-[24px] bg-[#f6efe3] p-5 sm:p-6">
+        <h2 className="text-[26px] font-extrabold tracking-tight">My activity</h2>
+
+        <ActivitySection title="Upcoming follow-ups" href="/admin/calendar" empty="No follow-ups scheduled.">
+          {crm.followUps.map((c) => (
+            <DateRow
+              key={c.id}
+              href={`/admin/clients/${c.id}`}
+              at={c.next_follow_up!}
+              overdue={new Date(c.next_follow_up!).getTime() < crm.now}
+              title={c.name}
+              sub={`${timeOf(c.next_follow_up!)} · ${label(CLIENT_STATUSES, c.status)}`}
+            />
+          ))}
+        </ActivitySection>
+
+        <ActivitySection title="Upcoming site visits" href="/admin/verifications" empty="No site visits booked.">
+          {crm.visits.map((v) => (
+            <DateRow
+              key={v.id}
+              href={`/admin/verifications/${v.id}`}
+              at={v.scheduled_at}
+              overdue={new Date(v.scheduled_at).getTime() < crm.now}
+              title={v.title}
+              sub={`${timeOf(v.scheduled_at)} · ${v.reference_no}${isAdmin && v.assignee ? ` · ${v.assignee}` : ""}`}
+            />
+          ))}
+        </ActivitySection>
+
+        <ActivitySection title="Latest activity" href={isAdmin ? "/admin/activity" : "/admin/clients"} empty="Nothing logged yet.">
+          {crm.recent.map((a) => (
+            <Link key={a.id} href={`/admin/clients/${a.client_id}`} className="flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 shadow-sm transition hover:shadow-md">
+              <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_18%,white)] text-xs font-extrabold text-[#7a5d1f]">
+                {initialsOf(a.actor_name ?? a.client_name)}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-bold">{a.actor_name ?? a.client_name}</span>
+                <span className="block truncate text-xs text-[var(--s-muted)]">
+                  {label(ACTIVITY_TYPES, a.type)} · {a.client_name}
+                </span>
+              </span>
+            </Link>
+          ))}
+        </ActivitySection>
+      </aside>
+    </div>
   );
 }
 
-/** Follow-ups, new leads and the pipeline: everyone's for admins, an agent's own otherwise. */
+/** Follow-ups, pipeline, visits and recent activity: everyone's for admins, an agent's own otherwise. */
 async function loadCrm(staff: Staff) {
   const scope = clientScope(staff);
   const now = nowMs();
   const endOfToday = new Date(new Date(startOfTodayIstIso()).getTime() + 86_400_000);
   const monthStart = startOfMonthIst();
   const open = "c.status NOT IN ('won', 'lost')";
+  const mineVisit = staff.role === "admin" ? "" : " AND v.assigned_to = ?";
+  const visitArgs = staff.role === "admin" ? [] : [staff.userId];
 
-  const [due, fresh, openCount, wonMonth, unread, byStatus, followUps] = await Promise.all([
+  const [due, fresh, openCount, wonMonth, unread, byStatus, followUps, visitsOpen, visits, recent] = await Promise.all([
     db.count(`SELECT COUNT(*) FROM clients c WHERE ${scope.sql} AND ${open} AND c.next_follow_up < ?`, [...scope.values, endOfToday]),
     db.count(`SELECT COUNT(*) FROM clients c WHERE ${scope.sql} AND c.status = 'new'`, scope.values),
     db.count(`SELECT COUNT(*) FROM clients c WHERE ${scope.sql} AND ${open}`, scope.values),
-    db.count(
-      `SELECT COUNT(*) FROM clients c WHERE ${scope.sql} AND c.status = 'won' AND c.updated_at >= ?`,
-      [...scope.values, monthStart],
-    ),
+    db.count(`SELECT COUNT(*) FROM clients c WHERE ${scope.sql} AND c.status = 'won' AND c.updated_at >= ?`, [...scope.values, monthStart]),
     db.count(
       `SELECT COUNT(*) FROM enquiry_messages m JOIN enquiries e ON e.id = m.enquiry_id LEFT JOIN clients c ON c.id = e.client_id
         WHERE ${staff.role === "admin" ? "1 = 1" : scope.sql} AND m.sender = 'member' AND m.read_at IS NULL`,
@@ -208,99 +246,148 @@ async function loadCrm(staff: Staff) {
     ),
     db.all<{ status: Client["status"]; n: number }>(`SELECT c.status, COUNT(*) AS n FROM clients c WHERE ${scope.sql} GROUP BY c.status`, scope.values),
     db.all<Client>(
-      `SELECT c.* FROM clients c WHERE ${scope.sql} AND ${open} AND c.next_follow_up IS NOT NULL
-        ORDER BY c.next_follow_up ASC LIMIT 8`,
+      `SELECT c.* FROM clients c WHERE ${scope.sql} AND ${open} AND c.next_follow_up IS NOT NULL ORDER BY c.next_follow_up ASC LIMIT 3`,
+      scope.values,
+    ),
+    db.count(`SELECT COUNT(*) FROM site_verifications v WHERE v.status = 'scheduled'${mineVisit}`, visitArgs),
+    db.all<{ id: string; scheduled_at: string; reference_no: string; title: string; assignee: string | null }>(
+      `SELECT v.id, v.scheduled_at, p.reference_no, p.title, u.name AS assignee
+         FROM site_verifications v JOIN properties p ON p.id = v.property_id LEFT JOIN users u ON u.id = v.assigned_to
+        WHERE v.status = 'scheduled' AND v.scheduled_at IS NOT NULL${mineVisit}
+        ORDER BY v.scheduled_at ASC LIMIT 3`,
+      visitArgs,
+    ),
+    db.all<{ id: string; type: ClientActivityType; client_id: string; client_name: string; actor_name: string | null }>(
+      `SELECT a.id, a.type, a.client_id, c.name AS client_name, u.name AS actor_name
+         FROM client_activities a JOIN clients c ON c.id = a.client_id LEFT JOIN users u ON u.id = a.actor_id AND u.role IN ('admin', 'agent')
+        WHERE ${scope.sql} ORDER BY a.created_at DESC LIMIT 3`,
       scope.values,
     ),
   ]);
-  return { now, due, fresh, openCount, wonMonth, unread, byStatus, followUps: followUps.slice(0, LIST_MAX) };
+  return { now, due, fresh, openCount, wonMonth, unread, byStatus, followUps, visitsOpen, visits, recent };
 }
 
-function FollowUpList({ followUps, now }: { followUps: Client[]; now: number }) {
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { timeZone: IST, hour: "numeric", minute: "2-digit" });
+
+function ActivitySection({ title, href, empty, children }: { title: string; href: string; empty: string; children: React.ReactNode[] }) {
   return (
-    <section className="min-w-0">
-      <SectionHeading count={followUps.length}>Upcoming follow-ups</SectionHeading>
-      {followUps.length ? (
-        <ul className="card divide-y divide-[var(--s-border)] overflow-hidden p-0">
-          {followUps.map((c) => (
-            <li key={c.id}>
-              <Link
-                href={`/admin/clients/${c.id}`}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5 transition-colors hover:bg-[var(--s-hover)]"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold text-[var(--s-text)]">{c.name}</p>
-                  <p className="truncate text-xs text-[var(--s-muted)]">{requirementSummary(c)}</p>
-                </div>
-                <ClientStatusBadge status={c.status} />
-                <span className="text-sm whitespace-nowrap">
-                  <FollowUp at={c.next_follow_up} now={now} />
+    <section>
+      <div className="mb-2.5 flex items-baseline justify-between">
+        <h3 className="text-sm font-bold text-[var(--s-text)]">{title}</h3>
+        <Link href={href} className="text-xs font-bold text-[var(--accent)] hover:underline">
+          View all
+        </Link>
+      </div>
+      {children.length ? <div className="space-y-2.5">{children}</div> : <p className="rounded-2xl bg-white/60 px-4 py-3 text-xs text-[var(--s-muted)]">{empty}</p>}
+    </section>
+  );
+}
+
+/** Row with a small date badge (day + month), title and a time line. */
+function DateRow({ href, at, title, sub, overdue }: { href: string; at: string; title: string; sub: string; overdue?: boolean }) {
+  const d = new Date(at);
+  const day = d.toLocaleDateString("en-IN", { timeZone: IST, day: "numeric" });
+  const mon = d.toLocaleDateString("en-IN", { timeZone: IST, month: "short" });
+  return (
+    <Link href={href} className="flex items-center gap-3 rounded-2xl bg-white px-3.5 py-3 shadow-sm transition hover:shadow-md">
+      <span
+        className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl leading-none ${
+          overdue ? "bg-red-50 text-red-600" : "bg-[color-mix(in_srgb,var(--accent)_14%,white)] text-[#7a5d1f]"
+        }`}
+      >
+        <span className="text-sm font-extrabold">{day}</span>
+        <span className="mt-0.5 text-[9px] font-bold uppercase">{mon}</span>
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-bold">{title}</span>
+        <span className={`block truncate text-xs ${overdue ? "font-semibold text-red-600" : "text-[var(--s-muted)]"}`}>{overdue ? `Overdue · ${sub}` : sub}</span>
+      </span>
+    </Link>
+  );
+}
+
+/** Donut of clients by pipeline stage, with a bar per stage beside it. */
+function PipelineCard({ byStatus }: { byStatus: { status: Client["status"]; n: number }[] }) {
+  const total = byStatus.reduce((a, r) => a + r.n, 0);
+  const count = (s: Client["status"]) => byStatus.find((r) => r.status === s)?.n ?? 0;
+  const max = Math.max(1, ...CLIENT_STATUSES.map((s) => count(s.value)));
+  const R = 52;
+  const C = 2 * Math.PI * R;
+  const GAP = total > 1 ? 3 : 0;
+  let offset = 0;
+
+  return (
+    <section className="card p-6">
+      <div className="mb-5 flex items-baseline justify-between">
+        <h2 className="text-lg font-extrabold tracking-tight">Client pipeline</h2>
+        <p className="text-sm font-extrabold tabular-nums">{total} clients</p>
+      </div>
+      <div className="grid items-center gap-8 sm:grid-cols-[180px_1fr]">
+        <div className="relative mx-auto size-[180px]">
+          <svg viewBox="0 0 140 140" className="size-full -rotate-90" aria-label={`${total} clients by stage`}>
+            <circle cx="70" cy="70" r={R} fill="none" stroke="var(--s-seg)" strokeWidth="18" />
+            {total > 0 &&
+              CLIENT_STATUSES.map((s) => {
+                const n = count(s.value);
+                if (!n) return null;
+                const len = (n / total) * C;
+                const seg = (
+                  <circle
+                    key={s.value}
+                    cx="70"
+                    cy="70"
+                    r={R}
+                    fill="none"
+                    stroke={STATUS_HEX[s.value]}
+                    strokeWidth="18"
+                    strokeDasharray={`${Math.max(len - GAP, 0.5)} ${C}`}
+                    strokeDashoffset={-offset}
+                  >
+                    <title>{`${s.label}: ${n}`}</title>
+                  </circle>
+                );
+                offset += len;
+                return seg;
+              })}
+          </svg>
+          <span className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-3xl font-extrabold tabular-nums">{total}</span>
+            <span className="text-xs font-semibold text-[var(--s-muted)]">clients</span>
+          </span>
+        </div>
+        <ul className="space-y-3.5">
+          {CLIENT_STATUSES.map((s) => (
+            <li key={s.value}>
+              <Link href={`/admin/clients?tab=${s.value}`} className="group block">
+                <span className="flex items-center justify-between text-sm font-semibold">
+                  <span className="flex items-center gap-2 group-hover:text-[var(--brand)]">
+                    <span className="size-2.5 rounded-full" style={{ background: STATUS_HEX[s.value] }} />
+                    {s.label}
+                  </span>
+                  <span className="font-extrabold tabular-nums">{count(s.value)}</span>
+                </span>
+                <span className="mt-1.5 block h-1.5 rounded-full bg-[var(--s-seg)]">
+                  <span className="block h-full rounded-full" style={{ width: `${(count(s.value) / max) * 100}%`, background: STATUS_HEX[s.value] }} />
                 </span>
               </Link>
             </li>
           ))}
         </ul>
-      ) : (
-        <Empty>No follow-ups scheduled.</Empty>
-      )}
+      </div>
     </section>
   );
 }
 
-function Glance({ rows }: { rows: { label: string; value: number; href: string; bad?: boolean }[] }) {
-  return (
-    <div className="card p-6">
-      <p className="mb-3 text-xl font-extrabold tracking-tight text-[var(--s-text)]">At a glance</p>
-      <ul className="-mx-2">
-        {rows.map((r) => (
-          <li key={r.label}>
-            <Link
-              href={r.href}
-              className="flex items-baseline gap-2 rounded-xl px-2 py-2 text-sm font-semibold text-[var(--s-text-2)] transition-colors hover:bg-[var(--s-hover)] hover:text-[var(--brand)]"
-            >
-              <span>{r.label}</span>
-              <span className="flex-1 translate-y-[-3px] border-b border-dotted border-[var(--s-border)]" aria-hidden />
-              <span className={`font-extrabold tabular-nums ${r.bad && r.value > 0 ? "text-[var(--s-late)]" : "text-[var(--s-text)]"}`}>{r.value}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function Pipeline({ byStatus }: { byStatus: { status: Client["status"]; n: number }[] }) {
-  const total = byStatus.reduce((a, r) => a + r.n, 0);
-  const count = (s: Client["status"]) => byStatus.find((r) => r.status === s)?.n ?? 0;
-  return (
-    <div className="card p-6">
-      <div className="mb-4 flex items-baseline justify-between gap-3">
-        <p className="text-xl font-extrabold tracking-tight text-[var(--s-text)]">Pipeline</p>
-        <p className="text-sm font-bold text-[var(--s-muted)] tabular-nums">{total} clients</p>
-      </div>
-      <div className="flex h-2 gap-1 overflow-hidden rounded-full bg-[var(--s-seg)]">
-        {total > 0 &&
-          CLIENT_STATUSES.map((s) => {
-            const n = count(s.value);
-            return n ? (
-              <div
-                key={s.value}
-                className={`${s.color.split(" ")[1]} rounded-full bg-current opacity-70`}
-                style={{ width: `${(n / total) * 100}%` }}
-                title={`${s.label}: ${n}`}
-              />
-            ) : null;
-          })}
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] font-semibold text-[var(--s-text-2)]">
-        {CLIENT_STATUSES.map((s) => (
-          <Link key={s.value} href={`/admin/clients?tab=${s.value}`} className="inline-flex items-center gap-1.5 hover:text-[var(--brand)]">
-            <span className={`size-2 rounded-full bg-current opacity-70 ${s.color.split(" ")[1]}`} />
-            {s.label}
-            <span className="ml-auto font-extrabold text-[var(--s-text)] tabular-nums">{count(s.value)}</span>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
+const svg = (d: string) => (
+  <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d={d} />
+  </svg>
+);
+const ICONS = {
+  inbox: svg("M12 3v12m-5-5 5 5 5-5M5 21h14"),
+  home: svg("M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5M10 21v-6h4v6"),
+  users: svg("M9 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"),
+  shield: svg("M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6zM9 12l2 2 4-4"),
+  clock: svg("M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"),
+  star: svg("M12 3l2.2 5.6L20 9.3l-4.5 3.8 1.4 5.9L12 15.9 7.1 19l1.4-5.9L4 9.3l5.8-.7z"),
+};
