@@ -156,7 +156,7 @@ If `sharp` fails to install on the host, ask Hostinger for a Node build with lib
 
 ## WhatsApp templates to submit (Meta → WhatsApp Manager)
 
-Language `en`. Body variables in the order the app sends them:
+Language `en`. Body variables in the order the app sends them. Ready-to-paste wording and sample values: [docs/whatsapp-templates.md](docs/whatsapp-templates.md).
 
 | Name | Category | Variables |
 |---|---|---|
