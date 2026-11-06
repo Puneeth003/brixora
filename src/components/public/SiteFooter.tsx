@@ -50,6 +50,11 @@ export function SiteFooter() {
                 Privacy policy
               </Link>
             </li>
+            <li>
+              <Link href="/terms" className={linkCls}>
+                Terms of use
+              </Link>
+            </li>
           </ul>
         </div>
         <div>

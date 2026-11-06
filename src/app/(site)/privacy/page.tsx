@@ -78,6 +78,11 @@ export default function PrivacyPage() {
         listing. If you have a staff or partner account, we may also email you about your account, such as password
         reset codes.
       </p>
+      <p>
+        Our team also chats with customers in the WhatsApp Business app on the same number. Messages you exchange with
+        that number, and the contact name we saved for you, may be copied into our customer records so any team member
+        can follow up. We use them only to respond to you and manage your enquiry or listing.
+      </p>
 
       <h2>Cookies</h2>
       <p>
@@ -116,6 +121,24 @@ export default function PrivacyPage() {
       <p>
         Contact {contact} and we will respond within a reasonable time. If you are not satisfied with our response,
         you can complain to the Data Protection Board of India.
+      </p>
+
+      <h2 id="delete-your-data">Deleting your data</h2>
+      <p>To delete your account and the personal information we hold about you:</p>
+      <ol className="list-decimal space-y-1 pl-5">
+        <li>
+          Send a WhatsApp message to our business number, or email {email || "us"}, with the words{" "}
+          <strong>&quot;Delete my data&quot;</strong> from the mobile number or email you used with us.
+        </li>
+        <li>We may ask you to confirm with a one-time code, so that no one else can delete your account.</li>
+        <li>
+          Within 30 days we delete your account, saved properties, enquiries and messages, and remove any listings you
+          own. We confirm on WhatsApp or email when it is done.
+        </li>
+      </ol>
+      <p>
+        We may keep a minimal record (for example, that a listing existed and was removed) where the law requires us
+        to. Replying <strong>STOP</strong> on WhatsApp only stops update messages; it does not delete your data.
       </p>
 
       <h2>Children</h2>
