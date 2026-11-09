@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { saveOrganization, updateStaffProfile } from "@/app/admin/settings-actions";
+import { saveOrganization, sendTestEmail, updateStaffProfile } from "@/app/admin/settings-actions";
 import type { ActionState } from "@/lib/types";
 
 function Status({ state }: { state: ActionState }) {
@@ -155,6 +155,19 @@ export function OrganizationForm({
         </button>
         <Status state={state} />
       </div>
+    </form>
+  );
+}
+
+/** One button: emails the signed-in admin so SMTP delivery can be checked. */
+export function TestEmailForm({ to }: { to: string }) {
+  const [state, action, pending] = useActionState(() => sendTestEmail(), null);
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-3">
+      <button disabled={pending} className="btn-secondary px-4 py-2 text-sm">
+        {pending ? "Sending…" : `Send test email to ${to}`}
+      </button>
+      <Status state={state} />
     </form>
   );
 }

@@ -41,6 +41,9 @@ function transport() {
 
 export const mailConfigured = Boolean(process.env.SMTP_HOST);
 
+/** Sender address shown on outgoing mail (for the settings page). */
+export const mailFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "";
+
 export async function sendMail(msg: { to: string; subject: string; text: string; html: string }) {
   if (!mailConfigured) {
     if (process.env.NODE_ENV === "production") throw new Error("Email is not configured (SMTP_HOST)");
@@ -82,6 +85,18 @@ export function passwordResetEmail({ name, code, minutes }: { name: string | nul
 <p style="margin:0 0 20px">We received a request to reset your ${esc(site.name)} password. Use this code to continue. It expires in <strong>${minutes} minutes</strong>.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px"><tr>${boxes}</tr></table>
 <p style="margin:0;color:#71717a;font-size:13px">If you didn't request this, you can ignore this email; your password stays the same.</p>`,
+    ),
+  };
+}
+
+export function testEmail({ name }: { name: string | null }) {
+  const hi = name || "there";
+  return {
+    subject: `${site.name} test email`,
+    text: `Hi ${hi},\n\nThis is a test email from ${site.name}. If you can read this, outgoing email (password resets, welcome emails) is working.\n\n— ${site.name}`,
+    html: layout(
+      `<p style="margin:0 0 12px">Hi <strong>${esc(hi)}</strong>,</p>
+<p style="margin:0">This is a test email from ${esc(site.name)}. If you can read this, outgoing email (password resets, welcome emails) is working.</p>`,
     ),
   };
 }

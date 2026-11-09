@@ -105,7 +105,12 @@ export async function requestPasswordReset(rawEmail: string): Promise<{ ok: true
   await recordAttempt("reset_send", email, true);
 
   const user = await findStaff(email);
-  if (!user) return { ok: true, message: GENERIC_SENT };
+  if (!user) {
+    // Same answer as for a real account, so the form can't be used to find staff emails;
+    // the server log says why nothing went out.
+    console.warn(`[reset] no active admin/agent account for ${email}; nothing sent`);
+    return { ok: true, message: GENERIC_SENT };
+  }
 
   const recent = await db.count("SELECT COUNT(*) FROM password_resets WHERE user_id = ? AND created_at > ?", [
     user.id,

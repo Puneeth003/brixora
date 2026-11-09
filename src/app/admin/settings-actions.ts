@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { mailConfigured, sendMail, testEmail } from "@/lib/mail";
 import type { ActionState } from "@/lib/types";
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -57,4 +58,23 @@ export async function signOutAllStaff(formData: FormData) {
   if (formData.get("confirm") !== "yes") redirect("/admin/settings?section=security");
   await db.run("DELETE FROM sessions WHERE kind = 'admin'");
   redirect("/admin/login");
+}
+
+/** Emails the signed-in admin, so SMTP delivery can be checked without resetting a password. */
+export async function sendTestEmail(): Promise<ActionState> {
+  const staff = await requireAdmin();
+  if (!mailConfigured && process.env.NODE_ENV === "production") {
+    return { ok: false, error: "Email is not configured: set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER and SMTP_PASS, then redeploy." };
+  }
+  try {
+    await sendMail({ to: staff.email, ...testEmail({ name: staff.name }) });
+  } catch (e) {
+    console.error("[mail] test email failed", e);
+    const reason = e instanceof Error ? e.message.split("\n")[0].slice(0, 200) : "unknown error";
+    return { ok: false, error: `The mail server refused the message: ${reason}` };
+  }
+  return {
+    ok: true,
+    message: mailConfigured ? `Sent to ${staff.email}. Check the inbox and spam folder.` : "Not configured: the email was printed to the server console (development).",
+  };
 }

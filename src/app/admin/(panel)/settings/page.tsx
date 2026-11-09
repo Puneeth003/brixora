@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { adminMfaRequired, requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { mailConfigured } from "@/lib/mail";
+import { mailConfigured, mailFrom } from "@/lib/mail";
 import { site } from "@/lib/site";
 import { PageHeader } from "@/components/admin/ui";
 import { ChangePasswordForm } from "@/components/crm/forms";
 import { signOutAllStaff } from "@/app/admin/settings-actions";
 import { brokeragePhone, graphVersion, normalizePhone, whatsappConnection } from "@/lib/whatsapp";
 import { formatDateTime } from "@/lib/format";
-import { OrganizationForm, ProfileForm } from "./SettingsForms";
+import { OrganizationForm, ProfileForm, TestEmailForm } from "./SettingsForms";
 import { WhatsAppConnect } from "./WhatsAppConnect";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -61,7 +61,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
           {active === "organization" && <OrganizationSection />}
           {active === "users" && <UsersSection />}
           {active === "whatsapp" && <WhatsAppSection />}
-          {active === "security" && <SecuritySection />}
+          {active === "security" && <SecuritySection email={staff.email} />}
         </div>
       </div>
     </div>
@@ -233,16 +233,27 @@ async function WhatsAppSection() {
   );
 }
 
-async function SecuritySection() {
+async function SecuritySection({ email }: { email: string }) {
   const sessions = await db.count("SELECT COUNT(*) FROM sessions WHERE kind = 'admin' AND expires_at > UTC_TIMESTAMP(3)");
   return (
     <>
       <Card title="Security" description="Read-only. These are configured through environment variables.">
         <ul className="divide-y divide-[var(--s-border)]">
           <StatusRow label="Two-factor authentication" on={adminMfaRequired} detail="ADMIN_2FA" />
-          <StatusRow label="Email" on={mailConfigured} detail="SMTP_HOST" />
+          <StatusRow label="Email" on={mailConfigured} detail={mailConfigured ? `${process.env.SMTP_HOST} · from ${mailFrom || "(no sender set)"}` : "SMTP_HOST"} />
           <StatusRow label="WhatsApp" on={Boolean(await whatsappConnection())} detail="Settings → WhatsApp, or WHATSAPP_TOKEN" />
         </ul>
+      </Card>
+      <Card title="Outgoing email" description="Password-reset codes, welcome emails and password-changed notices go out over SMTP. Send yourself a test to check delivery.">
+        {mailConfigured ? (
+          <TestEmailForm to={email} />
+        ) : (
+          <p className="text-sm text-[var(--s-text-2)]">
+            Not configured, so password resets can&apos;t be emailed. Create a mailbox for the domain (Hostinger: hPanel → Emails), then set{" "}
+            <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_SECURE</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> and <code>MAIL_FROM</code> in the
+            Node.js app&apos;s environment variables and redeploy.
+          </p>
+        )}
       </Card>
       <Card title="Staff sessions" description={`${sessions} active staff ${sessions === 1 ? "session" : "sessions"}.`}>
         <form action={signOutAllStaff} className="space-y-4">

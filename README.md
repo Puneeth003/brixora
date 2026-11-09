@@ -103,11 +103,12 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
    - Set `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`, `SMTP_SECURE=ssl`, and `SMTP_USER` / `SMTP_PASS` for that mailbox.
    - Set `MAIL_FROM` (same address) and `MAIL_FROM_NAME`.
    - Production refuses to send without `SMTP_HOST`, so password resets and welcome emails need it.
+   - Check delivery from Admin → Settings → Security → Outgoing email → "Send test email". Creating the mailbox also adds the domain's MX, SPF and DKIM records; without them Gmail and Outlook drop or spam-folder the mail.
 5. **Uploads folder:** create a folder outside the app directory (e.g. `/home/<user>/brixora-uploads`) and set `UPLOAD_DIR` to it. Redeploys replace the app folder, so photos must not live inside it. Include this folder in your backups.
 6. **Admin account:**
    - Run `npm run admin:create -- you@yourdomain.in` once, over SSH or locally with the `DB_*` variables pointing at the Hostinger database (enable Remote MySQL for your IP).
    - The first sign-in at `/admin/login` walks you through authenticator-app setup (unless `ADMIN_2FA=off`).
-   - Lost the authenticator? Run `npm run admin:create -- you@yourdomain.in --reset-2fa`. Forgot the password? Use "Forgot password" on the login page.
+   - Lost the authenticator? Run `npm run admin:create -- you@yourdomain.in --reset-2fa`. Forgot the password? Use "Forgot password" on the login page with the same email you gave `admin:create`; any other address gets the same "we've sent a code" message but no email (the server log says so).
 7. **Agents & brokers:**
    - Add staff in Admin → Agents & brokers. With an email and "send welcome email", they get a link to set their password.
    - Partner brokers can be added without an email, as records to credit referrals.
