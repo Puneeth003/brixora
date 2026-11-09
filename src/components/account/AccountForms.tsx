@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { markRepliesRead, savedState, sendMemberMessage, toggleSaved, updateMemberProfile } from "@/app/(site)/account/actions";
@@ -64,32 +65,64 @@ export function MarkRepliesRead({ unread }: { unread: number }) {
   return null;
 }
 
-/** Heart button on a listing. Asks guests to sign in. */
+/** Heart button on a listing. Guests are sent to sign in; failures say so instead of doing nothing. */
 export function SaveButton({ propertyId, refNo }: { propertyId: string; refNo: string }) {
   const router = useRouter();
-  const [saved, setSaved] = useState<boolean | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const loginHref = `/login?next=${encodeURIComponent(`/properties/${refNo}`)}`;
 
   useEffect(() => {
     savedState(propertyId)
-      .then((s) => setSaved(s.saved))
-      .catch(() => setSaved(false));
+      .then((s) => {
+        setSignedIn(s.signedIn);
+        setSaved(s.saved);
+      })
+      .catch(() => setSignedIn(false));
   }, [propertyId]);
 
   function click() {
+    setError(null);
+    // Known guest: go straight to sign-in, no round trip.
+    if (signedIn === false) {
+      router.push(loginHref);
+      return;
+    }
     start(async () => {
-      const res = await toggleSaved(propertyId);
-      if (res.needsLogin) router.push(`/login?next=${encodeURIComponent(`/properties/${refNo}`)}`);
-      else if (res.ok) setSaved(Boolean(res.saved));
+      try {
+        const res = await toggleSaved(propertyId);
+        if (res.needsLogin) router.push(loginHref);
+        else if (res.ok) setSaved(Boolean(res.saved));
+        else setError("This listing can’t be saved right now.");
+      } catch {
+        setError("Couldn’t reach the server. Check your connection and try again.");
+      }
     });
   }
 
   return (
-    <button type="button" onClick={click} disabled={pending || saved === null} className="btn-secondary w-full" aria-pressed={Boolean(saved)}>
-      <span aria-hidden className={saved ? "text-red-500" : "text-zinc-400"}>
-        {saved ? "♥" : "♡"}
-      </span>
-      {saved ? "Saved to your shortlist" : "Save to shortlist"}
-    </button>
+    <div className="space-y-2">
+      <button type="button" onClick={click} disabled={pending} className="btn-secondary w-full" aria-pressed={saved}>
+        <span aria-hidden className={saved ? "text-red-500" : "text-zinc-400"}>
+          {saved ? "♥" : "♡"}
+        </span>
+        {pending ? "Saving…" : saved ? "Saved to your shortlist" : "Save to shortlist"}
+      </button>
+      {signedIn === false && !error && (
+        <p className="text-center text-xs text-zinc-500">
+          <Link href={loginHref} className="font-semibold text-brand-700 hover:underline">
+            Log in with WhatsApp
+          </Link>{" "}
+          to keep a shortlist.
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-center text-xs text-red-600">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

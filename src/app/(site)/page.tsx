@@ -98,15 +98,17 @@ export default async function Home() {
               Find Your Dream
               <br />
               Home in{" "}
+              {/* Served as-is (not through the image optimiser): the host returned 503 for it.
+                  The file is pre-sized for retina at the largest heading size. Height keeps the
+                  palm tops at cap height so it never touches the line above. */}
               <Image
                 src="/brand/mangalore-script.webp"
                 alt={site.defaultCity}
-                width={1984}
-                height={471}
-                quality={90}
+                width={1100}
+                height={261}
                 priority
-                sizes="(min-width: 1024px) 640px, 80vw"
-                className="ml-[-0.05em] inline-block h-[1.35em] w-auto max-w-full align-[-0.5em]"
+                unoptimized
+                className="ml-[0.02em] inline-block h-[1.15em] w-auto max-w-full align-[-0.45em]"
               />
             </h1>
             <p className="mt-6 max-w-[34rem] text-lg leading-relaxed text-zinc-600 sm:text-xl lg:mt-[clamp(1rem,3vh,2rem)] lg:text-[clamp(1.05rem,2.4vh,1.375rem)]">

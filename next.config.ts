@@ -10,8 +10,10 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "8mb" },
   },
   images: {
-    qualities: [75, 90],
-    // Listing photos are served by this app at /media/… (see src/app/media).
+    // Serve images as-is. Hostinger returned 503 from the /_next/image optimiser
+    // (listing galleries and the hero headline went blank), and listing photos are
+    // already resized and converted to WebP at upload time (src/lib/images.ts).
+    unoptimized: true,
   },
 };
 

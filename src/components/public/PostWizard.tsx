@@ -7,6 +7,7 @@ import { compressImage } from "@/lib/compress";
 import { PhoneOtp } from "@/components/PhoneOtp";
 import { site } from "@/lib/site";
 import { createDraft, finalizeSubmission, uploadDraftPhoto } from "@/app/(site)/post/actions";
+import { clearDraft, loadDraft, loadPhotos, saveDraft, savePhotos } from "@/lib/post-draft";
 
 const STEPS = ["Type", "Location", "Details", "Photos", "Verify", "Your name"] as const;
 
@@ -65,6 +66,10 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
   const [progress, setProgress] = useState("");
   const [draft, setDraft] = useState<{ id: string; ref: string; uploaded: number } | null>(null);
   const [doneRef, setDoneRef] = useState<string | null>(null);
+  // Draft persistence: nothing is written until the saved draft (if any) has been read,
+  // so a fresh render can't overwrite it with empty fields.
+  const [restored, setRestored] = useState(false);
+  const loadedRef = useRef(false);
 
   const residential = isResidential(form.property_type);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
@@ -75,6 +80,68 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
   }, [photos]);
   useEffect(() => () => photosRef.current.forEach((p) => URL.revokeObjectURL(p.url)), []);
 
+  // Restore an unfinished listing from this browser (text from localStorage, photos from IndexedDB).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const d = loadDraft<Form>();
+      const hasContent = d && (d.form.locality || d.form.title || d.form.description || d.form.price || d.form.private_address);
+      if (hasContent) {
+        const saved = await loadPhotos();
+        if (cancelled) return;
+        setForm((f) => ({ ...f, ...d.form }));
+        setName(d.name || "");
+        setPhotos(saved.map((x) => ({ id: x.id, file: x.file, url: URL.createObjectURL(x.file) })));
+        // Never land on Verify or Your name: the OTP has to be done again anyway.
+        setStep(Math.min(Math.max(d.step, 0), 3));
+        setRestored(true);
+      }
+      loadedRef.current = true;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loadedRef.current || doneRef) return;
+    saveDraft(form, Math.min(step, 3), name);
+  }, [form, step, name, doneRef]);
+
+  useEffect(() => {
+    if (!loadedRef.current || doneRef) return;
+    savePhotos(photos.map((p) => ({ id: p.id, file: p.file })));
+  }, [photos, doneRef]);
+
+  async function startOver() {
+    await clearDraft();
+    photosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    setPhotos([]);
+    setName("");
+    setError(null);
+    setRestored(false);
+    setForm((f) => ({
+      ...f,
+      locality: "",
+      private_address: "",
+      private_landmark: "",
+      title: "",
+      description: "",
+      price: "",
+      price_negotiable: false,
+      bedrooms: "",
+      bathrooms: "",
+      area_sqft: "",
+      furnishing: "",
+      floor: "",
+      property_age: "",
+      available_from: "",
+      amenities: [],
+    }));
+    setStep(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   const stepError = useMemo(() => {
     if (step === 1) {
       if (form.locality.trim().length < 2) return "Enter the locality.";
@@ -83,12 +150,14 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
     if (step === 2) {
       if (form.title.trim().length < 10) return "Title should be at least 10 characters.";
       if (!Number(form.price) || Number(form.price) < 1000) return "Enter a valid price.";
+      if (residential && !form.bedrooms) return "Choose the number of bedrooms.";
+      if (!Number(form.area_sqft)) return "Enter the area in sq.ft.";
       if (form.description.trim().length < 30) return "Describe the property in at least 30 characters.";
     }
     if (step === 3 && photos.length < PHOTO_LIMITS.min) return `Add at least ${PHOTO_LIMITS.min} photos.`;
     if (step === 5 && name.trim().length < 2) return "Enter your name.";
     return null;
-  }, [step, form, photos.length, name]);
+  }, [step, form, photos.length, name, residential]);
 
   const next = () => {
     if (stepError) return setError(stepError);
@@ -162,6 +231,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
       const fin = await finalizeSubmission(current.id);
       if (!fin.ok) throw new Error(fin.error);
       setDoneRef(fin.ref);
+      void clearDraft();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
     } finally {
@@ -195,6 +265,14 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
 
   return (
     <div className="space-y-6">
+      {restored && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-800">
+          <span>We kept the listing you started earlier. Carry on where you left off.</span>
+          <button type="button" onClick={startOver} className="font-semibold underline underline-offset-2 hover:no-underline">
+            Start over
+          </button>
+        </div>
+      )}
       <ol className="flex gap-1">
         {STEPS.map((label, i) => (
           <li key={label} className="flex-1">
@@ -257,7 +335,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
               <Field label="City">
                 <input className="input" value={form.city} onChange={(e) => set("city", e.target.value)} />
               </Field>
-              <Field label="Locality / area" hint="Shown publicly">
+              <Field label="Locality / area" hint="Shown publicly" required>
                 <input
                   className="input"
                   value={form.locality}
@@ -266,7 +344,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
                 />
               </Field>
             </div>
-            <Field label="Full address" hint="Private – only our team sees this">
+            <Field label="Full address" hint="Private – only our team sees this" required>
               <textarea
                 className="input"
                 rows={2}
@@ -287,7 +365,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
 
         {step === 2 && (
           <>
-            <Field label="Listing title">
+            <Field label="Listing title" required>
               <input
                 className="input"
                 value={form.title}
@@ -297,7 +375,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={form.listing_type === "rent" ? "Monthly rent (₹)" : "Expected price (₹)"}>
+              <Field label={form.listing_type === "rent" ? "Monthly rent (₹)" : "Expected price (₹)"} required>
                 <input
                   className="input"
                   inputMode="numeric"
@@ -319,7 +397,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
             <div className="grid gap-4 sm:grid-cols-3">
               {residential && (
                 <>
-                  <Field label="Bedrooms">
+                  <Field label="Bedrooms" required>
                     <select className="input" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)}>
                       <option value="">—</option>
                       {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
@@ -337,7 +415,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
                   </Field>
                 </>
               )}
-              <Field label={form.property_type === "plot" ? "Area (sq.ft)" : "Built-up area (sq.ft)"}>
+              <Field label={form.property_type === "plot" ? "Area (sq.ft)" : "Built-up area (sq.ft)"} required>
                 <input
                   className="input"
                   inputMode="numeric"
@@ -381,7 +459,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
                 />
               </Field>
             </div>
-            <Field label="Description" hint="Don't include phone numbers or exact address">
+            <Field label="Description" hint="Don't include phone numbers or exact address" required>
               <textarea
                 className="input"
                 rows={5}
@@ -483,7 +561,7 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
 
         {step === 5 && (
           <>
-            <Field label="Your name">
+            <Field label="Your name" required>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
             </Field>
             <p className="text-sm text-zinc-500">
@@ -523,11 +601,18 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, hint, required, children }: { label: string; hint?: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
       <label className="label">
-        {label} {hint && <span className="font-normal text-zinc-400">· {hint}</span>}
+        {label}
+        {required && (
+          <span className="text-red-600" title="Required">
+            {" "}
+            *<span className="sr-only"> (required)</span>
+          </span>
+        )}{" "}
+        {hint && <span className="font-normal text-zinc-400">· {hint}</span>}
       </label>
       {children}
     </div>
