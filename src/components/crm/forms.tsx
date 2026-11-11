@@ -325,9 +325,9 @@ export function AgentForm({ agent, mailReady }: { agent?: Agent; mailReady: bool
       </Field>
       {!agent && (
         <label className="flex items-center gap-2 text-sm text-zinc-600 sm:col-span-2">
-          <input type="checkbox" name="send_welcome" defaultChecked={mailReady} />
+          <input type="checkbox" name="send_welcome" defaultChecked />
           Email them a link to set their own password
-          {!mailReady && <span className="text-xs text-zinc-400">(email isn&apos;t configured; printed to the server log in development)</span>}
+          {!mailReady && <span className="text-xs font-semibold text-amber-700">(email isn&apos;t set up on this server yet, so this will fail until SMTP is added)</span>}
         </label>
       )}
       <div className="flex items-center gap-3 sm:col-span-2">

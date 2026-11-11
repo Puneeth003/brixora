@@ -8,7 +8,7 @@ import { db, transaction, uuid } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/crypto";
 import { clientScope, loadClientFor, logClientActivity } from "@/lib/crm";
 import { normalizeIndianPhone } from "@/lib/format";
-import { mailConfigured, passwordChangedEmail, sendMail, welcomeEmail } from "@/lib/mail";
+import { mailConfigured, mailErrorReason, passwordChangedEmail, sendMail, welcomeEmail } from "@/lib/mail";
 import { passwordProblem } from "@/lib/password";
 import { parseIstInput } from "@/lib/time";
 import { site } from "@/lib/site";
@@ -303,31 +303,38 @@ export async function saveAgent(_prev: ActionState, formData: FormData): Promise
     if (id) await db.run("DELETE FROM sessions WHERE user_id = ?", [id]);
   }
 
-  let message = id ? "Saved." : "Agent added.";
-  if (!id && data.email && formData.get("send_welcome") === "on") {
-    message = (await sendWelcome(userId!)) ? "Agent added and welcome email sent." : "Agent added, but the welcome email couldn't be sent.";
+  const message = id ? "Saved." : "User added.";
+  let invite: { ok: boolean; message: string } | null = null;
+  if (!id && data.email && formData.get("send_welcome") === "on") invite = await sendWelcome(userId!);
+  if (!id) {
+    const q = invite && !invite.ok ? `saved=${encodeURIComponent(message)}&error=${encodeURIComponent(invite.message)}` : `saved=${encodeURIComponent(invite ? `${message} ${invite.message}` : message)}`;
+    redirect(`/admin/users/${userId}?${q}`);
   }
-  if (!id) redirect(`/admin/users/${userId}?saved=${encodeURIComponent(message)}`);
   return { ok: true, message };
 }
 
-async function sendWelcome(userId: string) {
+/** Emails a set-password link. Returns a message for the admin saying what happened. */
+async function sendWelcome(userId: string): Promise<{ ok: boolean; message: string }> {
   const u = await db.one<{ name: string | null; email: string | null }>("SELECT name, email FROM users WHERE id = ?", [userId]);
-  if (!u?.email) return false;
+  if (!u?.email) return { ok: false, message: "This user has no email address, so no invite was sent." };
   try {
     const link = `${site.url}/admin/forgot-password?email=${encodeURIComponent(u.email)}`;
-    await sendMail({ to: u.email, ...welcomeEmail({ name: u.name, email: u.email, link }) });
-    return true;
+    const how = await sendMail({ to: u.email, ...welcomeEmail({ name: u.name, email: u.email, link }) });
+    return how === "sent"
+      ? { ok: true, message: `Invite sent to ${u.email}.` }
+      : { ok: false, message: `Not sent: email isn't set up here, so the invite was only printed in the dev server terminal. Add SMTP settings to send it to ${u.email}.` };
   } catch (e) {
     console.error("[agents] welcome email failed", e);
-    return false;
+    return { ok: false, message: `Invite to ${u.email} failed: ${mailErrorReason(e)}.` };
   }
 }
 
 export async function sendAgentWelcome(id: string) {
   await requireAdmin();
-  if (isUuid(id)) await sendWelcome(id);
+  if (!isUuid(id)) return;
+  const res = await sendWelcome(id);
   revalidatePath("/admin", "layout");
+  redirect(`/admin/users/${id}?${res.ok ? "saved" : "error"}=${encodeURIComponent(res.message)}`);
 }
 
 export async function setStaffActive(id: string, active: boolean) {

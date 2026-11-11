@@ -44,14 +44,30 @@ export const mailConfigured = Boolean(process.env.SMTP_HOST);
 /** Sender address shown on outgoing mail (for the settings page). */
 export const mailFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "";
 
-export async function sendMail(msg: { to: string; subject: string; text: string; html: string }) {
+/** Sends, or (development without SMTP_HOST) prints to the console. Says which. */
+export async function sendMail(msg: { to: string; subject: string; text: string; html: string }): Promise<"sent" | "printed"> {
   if (!mailConfigured) {
     if (process.env.NODE_ENV === "production") throw new Error("Email is not configured (SMTP_HOST)");
     console.log(`[mail:dev] to=${msg.to} subject=${JSON.stringify(msg.subject)}\n${msg.text}\n`);
-    return;
+    return "printed";
   }
   const from = process.env.MAIL_FROM || process.env.SMTP_USER;
   await transport().sendMail({ from: `"${process.env.MAIL_FROM_NAME || site.name}" <${from}>`, ...msg });
+  return "sent";
+}
+
+/** Plain-language reason a send failed, for the admin (never shown to the public). */
+export function mailErrorReason(e: unknown) {
+  const err = e as { code?: string; responseCode?: number; message?: string };
+  if (!mailConfigured) return "email isn't set up on the server (SMTP_HOST is empty)";
+  if (err.code === "EAUTH" || err.responseCode === 535 || err.responseCode === 534) {
+    return "the email server rejected the login: check SMTP_USER and SMTP_PASS (for Gmail, a 16-letter app password with no spaces)";
+  }
+  if (["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EDNS", "ECONNREFUSED"].includes(err.code ?? "")) {
+    return "couldn't reach the email server: check SMTP_HOST, SMTP_PORT and SMTP_SECURE";
+  }
+  if (err.code === "EENVELOPE") return "the recipient address was refused";
+  return err.message ? `the email server said: ${err.message.slice(0, 160)}` : "unknown email error";
 }
 
 // ---------------------------------------------------------------------------

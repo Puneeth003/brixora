@@ -71,7 +71,8 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
   const me = await requireAdmin();
   const { id } = await params;
   const sp = await searchParams;
-  const saved = typeof sp.saved === "string" ? sp.saved.slice(0, 200) : null;
+  const saved = typeof sp.saved === "string" ? sp.saved.slice(0, 300) : null;
+  const inviteError = typeof sp.error === "string" ? sp.error.slice(0, 400) : null;
   if (!UUID_RE.test(id)) notFound();
 
   const u = await db.one<UserRow>(
@@ -196,6 +197,11 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
       {saved && (
         <p role="status" className="mb-5 rounded-[16px] bg-[var(--s-brand-soft)] px-4 py-3 text-sm font-semibold text-[var(--brand)]">
           {saved}
+        </p>
+      )}
+      {inviteError && (
+        <p role="alert" className="mb-5 rounded-[16px] bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {inviteError}
         </p>
       )}
 

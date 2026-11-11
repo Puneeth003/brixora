@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { mailConfigured, sendMail, testEmail } from "@/lib/mail";
+import { mailConfigured, sendMail, testEmail, mailErrorReason } from "@/lib/mail";
 import type { ActionState } from "@/lib/types";
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -70,8 +70,7 @@ export async function sendTestEmail(): Promise<ActionState> {
     await sendMail({ to: staff.email, ...testEmail({ name: staff.name }) });
   } catch (e) {
     console.error("[mail] test email failed", e);
-    const reason = e instanceof Error ? e.message.split("\n")[0].slice(0, 200) : "unknown error";
-    return { ok: false, error: `The mail server refused the message: ${reason}` };
+    return { ok: false, error: `Not sent: ${mailErrorReason(e)}.` };
   }
   return {
     ok: true,
