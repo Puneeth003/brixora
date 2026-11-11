@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
   // Native / Node-only modules; keep them out of the server bundle.
   serverExternalPackages: ["sharp", "mysql2"],
   experimental: {
+    // Hostinger's build box reports dozens of CPUs but has little memory; one worker
+    // per CPU (54) aborted page generation with SIGABRT. Two workers is plenty for ~50 pages.
+    cpus: 2,
     // Photos are compressed in the browser and uploaded one per request.
     serverActions: { bodySizeLimit: "8mb" },
   },
