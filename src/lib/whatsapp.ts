@@ -17,12 +17,13 @@ export type NotifyTemplate =
   | "sold_confirmed" // [ref]
   | "enquiry_forward" // [ref, name, phone, message, link]
   | "enquiry_reply" // [name, ref, link]
-  | "site_visit_scheduled"; // [ref, date & time]
+  | "site_visit_scheduled" // [ref, date & time]
+  | "staff_invite"; // [name, set-password link]
 
 type TemplateName = NotifyTemplate | "otp_login";
 
 // Templates that still go to owners who replied STOP.
-const ESSENTIAL: TemplateName[] = ["otp_login", "listing_rejected", "change_rejected", "enquiry_forward"];
+const ESSENTIAL: TemplateName[] = ["otp_login", "listing_rejected", "change_rejected", "enquiry_forward", "staff_invite"];
 const AUTH_TEMPLATES: TemplateName[] = ["otp_login"];
 
 type Result = { ok: boolean; status?: string; error?: string; suppressed?: boolean };

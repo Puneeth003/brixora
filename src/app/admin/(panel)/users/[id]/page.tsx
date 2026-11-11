@@ -280,7 +280,7 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
               <div className="flex flex-wrap gap-2">
                 {u.email && isActive && (
                   <form action={sendAgentWelcome.bind(null, u.id)}>
-                    <button className={softBtn}>Email a set-password link</button>
+                    <button className={softBtn}>Send invite (email + WhatsApp)</button>
                   </form>
                 )}
                 {!isMe && (

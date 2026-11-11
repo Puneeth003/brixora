@@ -172,5 +172,6 @@ Language `en`. Body variables in the order the app sends them. Ready-to-paste wo
 | `enquiry_forward` | Utility | {{1}} reference, {{2}} name, {{3}} phone, {{4}} message, {{5}} link |
 | `enquiry_reply` | Utility | {{1}} name, {{2}} reference, {{3}} link to the account's enquiries |
 | `site_visit_scheduled` | Utility | {{1}} reference, {{2}} date & time |
+| `staff_invite` | Utility | {{1}} first name, {{2}} set-password link |
 
 When a member replies STOP, `users.wa_opt_out` is set and non-essential templates are skipped. OTP, rejections and enquiry forwards still go out.

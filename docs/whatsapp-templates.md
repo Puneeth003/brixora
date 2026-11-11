@@ -99,6 +99,15 @@ A site visit for your property {{1}} is scheduled for {{2}}. Our agent will cont
 ```
 Samples: `BRX-2026-0042`, `12 Nov 2026, 11:00 AM`
 
+## 12. `staff_invite`: Utility
+
+Sent to a new agent, broker or admin (their phone on the user page) together with the invite email.
+
+```
+Hi {{1}}, you have been added to the Brixora team. Set your password and sign in here: {{2}} . You will get a 6-digit code by email to confirm it is you.
+```
+Samples: `Priya`, `https://brixora.in/admin/forgot-password?email=priya%40brixora.in`
+
 ---
 
 ## Tips

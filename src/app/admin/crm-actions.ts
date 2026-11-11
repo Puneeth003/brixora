@@ -12,7 +12,7 @@ import { mailConfigured, mailErrorReason, passwordChangedEmail, sendMail, welcom
 import { passwordProblem } from "@/lib/password";
 import { parseIstInput } from "@/lib/time";
 import { site } from "@/lib/site";
-import { notify } from "@/lib/whatsapp";
+import { notify, whatsappConnection } from "@/lib/whatsapp";
 import { CLIENT_STATUSES, label } from "@/lib/crm-constants";
 import type { ActionState, ClientStatus } from "@/lib/types";
 
@@ -305,7 +305,7 @@ export async function saveAgent(_prev: ActionState, formData: FormData): Promise
 
   const message = id ? "Saved." : "User added.";
   let invite: { ok: boolean; message: string } | null = null;
-  if (!id && data.email && formData.get("send_welcome") === "on") invite = await sendWelcome(userId!);
+  if (!id && data.email && formData.get("send_welcome") === "on") invite = await sendInvite(userId!);
   if (!id) {
     const q = invite && !invite.ok ? `saved=${encodeURIComponent(message)}&error=${encodeURIComponent(invite.message)}` : `saved=${encodeURIComponent(invite ? `${message} ${invite.message}` : message)}`;
     redirect(`/admin/users/${userId}?${q}`);
@@ -313,26 +313,50 @@ export async function saveAgent(_prev: ActionState, formData: FormData): Promise
   return { ok: true, message };
 }
 
-/** Emails a set-password link. Returns a message for the admin saying what happened. */
-async function sendWelcome(userId: string): Promise<{ ok: boolean; message: string }> {
-  const u = await db.one<{ name: string | null; email: string | null }>("SELECT name, email FROM users WHERE id = ?", [userId]);
-  if (!u?.email) return { ok: false, message: "This user has no email address, so no invite was sent." };
+/**
+ * Invites a staff member to set their password: an email with the link, and the same
+ * link on WhatsApp (to their work phone). Returns a message saying what happened to each.
+ */
+async function sendInvite(userId: string): Promise<{ ok: boolean; message: string }> {
+  const u = await db.one<{ name: string | null; email: string | null; work_phone: string | null }>(
+    "SELECT name, email, work_phone FROM users WHERE id = ?",
+    [userId],
+  );
+  // Staff sign in with email + password, so without an email there's nothing to invite to.
+  if (!u?.email) return { ok: false, message: "This user has no email address, so they can't sign in and no invite was sent." };
+  const link = `${site.url}/admin/forgot-password?email=${encodeURIComponent(u.email)}`;
+  const done: string[] = [];
+  const failed: string[] = [];
+
   try {
-    const link = `${site.url}/admin/forgot-password?email=${encodeURIComponent(u.email)}`;
     const how = await sendMail({ to: u.email, ...welcomeEmail({ name: u.name, email: u.email, link }) });
-    return how === "sent"
-      ? { ok: true, message: `Invite sent to ${u.email}.` }
-      : { ok: false, message: `Not sent: email isn't set up here, so the invite was only printed in the dev server terminal. Add SMTP settings to send it to ${u.email}.` };
+    if (how === "sent") done.push(`email to ${u.email}`);
+    else failed.push("email: not set up here, so it was only printed in the dev server terminal");
   } catch (e) {
-    console.error("[agents] welcome email failed", e);
-    return { ok: false, message: `Invite to ${u.email} failed: ${mailErrorReason(e)}.` };
+    console.error("[invite] email failed", e);
+    failed.push(`email to ${u.email}: ${mailErrorReason(e)}`);
   }
+
+  const phone = u.work_phone ? normalizeIndianPhone(u.work_phone) : null;
+  if (!phone) {
+    failed.push(u.work_phone ? "WhatsApp: the phone number isn't a valid Indian mobile" : "WhatsApp: no phone number on file");
+  } else {
+    const live = await whatsappConnection();
+    const wa = await notify(phone, "staff_invite", [u.name?.split(" ")[0] || "there", link]);
+    if (!wa.ok) failed.push(`WhatsApp to +${phone}: ${wa.error ?? "not sent"} (see Admin → WhatsApp log)`);
+    else if (!live) failed.push("WhatsApp: not set up here, so it was only printed in the dev server terminal");
+    else done.push(`WhatsApp to +${phone}`);
+  }
+
+  const sent = done.length ? `Invite sent by ${done.join(" and ")}.` : "";
+  const notSent = failed.length ? `Not sent: ${failed.join("; ")}.` : "";
+  return { ok: failed.length === 0, message: [sent, notSent].filter(Boolean).join(" ") };
 }
 
 export async function sendAgentWelcome(id: string) {
   await requireAdmin();
   if (!isUuid(id)) return;
-  const res = await sendWelcome(id);
+  const res = await sendInvite(id);
   revalidatePath("/admin", "layout");
   redirect(`/admin/users/${id}?${res.ok ? "saved" : "error"}=${encodeURIComponent(res.message)}`);
 }
