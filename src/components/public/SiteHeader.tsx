@@ -2,8 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
 import { site, whatsappLink } from "@/lib/site";
-import { PhoneIcon, UserIcon } from "@/components/icons";
-import { MobileMenu, NavLinks } from "./NavLinks";
+import { PhoneIcon } from "@/components/icons";
+import { HeaderMobileMenu, HeaderProfile } from "./HeaderProfile";
+import { MobileMenuFallback, NavLinks } from "./NavLinks";
+import { ProfileFallback } from "./ProfileMenu";
 
 /** Brand artwork from public/brand (green/gold wordmark). `light` = for dark backgrounds. */
 export function BrandLogo({ light = false, tagline = false }: { light?: boolean; tagline?: boolean }) {
@@ -35,10 +37,10 @@ export function SiteHeader() {
             <NavLinks />
           </Suspense>
           <span className="mx-2 hidden h-6 w-px bg-zinc-200 lg:block" />
-          <Link href="/account" className="btn-ghost hidden font-semibold sm:inline-flex lg:text-base">
-            <UserIcon />
-            My account
-          </Link>
+          {/* Profile: "Sign in" when signed out, avatar + dropdown when signed in. Reads the session cookie, so it streams in. */}
+          <Suspense fallback={<ProfileFallback />}>
+            <HeaderProfile />
+          </Suspense>
           <a
             href={contact}
             target={contact.startsWith("http") ? "_blank" : undefined}
@@ -48,8 +50,8 @@ export function SiteHeader() {
             <PhoneIcon />
             Contact Now
           </a>
-          <Suspense fallback={null}>
-            <MobileMenu contactHref={contact} />
+          <Suspense fallback={<MobileMenuFallback />}>
+            <HeaderMobileMenu contactHref={contact} />
           </Suspense>
         </div>
       </div>

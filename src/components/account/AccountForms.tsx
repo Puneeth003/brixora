@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { markRepliesRead, savedState, sendMemberMessage, toggleSaved, updateMemberProfile } from "@/app/(site)/account/actions";
+import { REPLIES_READ_EVENT } from "@/components/public/ProfileMenu";
 import type { ActionState } from "@/lib/types";
 
 function Status({ state }: { state: ActionState }) {
@@ -60,7 +61,11 @@ export function MessageForm({ enquiryId }: { enquiryId: string }) {
 /** Marks our replies as read once the member has the page open. */
 export function MarkRepliesRead({ unread }: { unread: number }) {
   useEffect(() => {
-    if (unread > 0) markRepliesRead();
+    if (unread <= 0) return;
+    // The page keeps its "New" highlights; only the header's unread dot is told to clear.
+    markRepliesRead()
+      .then(() => window.dispatchEvent(new Event(REPLIES_READ_EVENT)))
+      .catch(() => {});
   }, [unread]);
   return null;
 }
