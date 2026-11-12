@@ -1,7 +1,7 @@
 import "server-only";
 import { db, likeEscape } from "@/lib/db";
-import { ACTION_FILTERS, BURST_VERBS, summariseDiff, type DiffFormat, type Kind } from "@/lib/activity-feed";
-import { ACTIVITY_TYPES, label } from "@/lib/crm-constants";
+import { ACTION_FILTERS, ADMIN_ENTITIES, BURST_VERBS, summariseDiff, type DiffFormat, type Kind } from "@/lib/activity-feed";
+import { ACTIVITY_TYPES, WON_BODY_LIKE, label } from "@/lib/crm-constants";
 import { formatPrice } from "@/lib/format";
 import type { ClientActivityType } from "@/lib/types";
 
@@ -17,16 +17,24 @@ export type FeedRow = {
   actor_name: string | null;
   actor_role: "admin" | "agent" | "owner" | null;
   target_type: string;
-  target_id: string;
+  /** Null on a timeline entry whose client has since been deleted. */
+  target_id: string | null;
+  /** Null when the listing, builder, project, user or client no longer exists. */
   target_name: string | null;
   target_sub: string | null;
 };
 
 const STAFF = "('admin', 'agent')";
+const ADMIN_ENTITY_LIST = `(${ADMIN_ENTITIES.map((e) => `'${e}'`).join(", ")})`;
 /** Logged client contacts that count towards "Top performers". */
 export const CONTACT_TYPES = ["call", "meeting", "site_visit", "whatsapp", "email"] as const;
 /** Status-change bodies look like "Negotiation → Won". */
-export const WON_LIKE = "%→ Won";
+export const WON_LIKE = WON_BODY_LIKE;
+/**
+ * One win per client. A deleted client's entries have no client_id left (migration 007),
+ * so each of those counts on its own.
+ */
+const WON_CLIENT = "COALESCE(ca.client_id, ca.id)";
 
 /**
  * The merged feed as one UNION ALL query with a common column set. Both halves take
@@ -42,8 +50,10 @@ export type FeedOpts = {
   staffOnly?: boolean;
   /** An ACTION_FILTERS value. */
   action?: string;
-  /** Matches a client's name or note, or a listing's reference, title, builder or project. */
+  /** Matches a client's name or note, a listing's reference, title, builder or project, or a user's name. */
   q?: string;
+  /** Leave sign-ins out (the "actions" counts: signing in isn't work done). */
+  noSignIns?: boolean;
 };
 
 export function feedQuery(opts: FeedOpts) {
@@ -61,9 +71,12 @@ export function feedQuery(opts: FeedOpts) {
     const term = `%${likeEscape(opts.q)}%`;
     crmWhere.push("(c.name LIKE ? OR ca.body LIKE ?)");
     crmParams.push(term, term);
-    logWhere.push("(p.reference_no LIKE ? OR p.title LIKE ? OR b.name LIKE ? OR pj.name LIKE ?)");
-    logParams.push(term, term, term, term);
+    logWhere.push("(p.reference_no LIKE ? OR p.title LIKE ? OR b.name LIKE ? OR pj.name LIKE ? OR tu.name LIKE ?)");
+    logParams.push(term, term, term, term, term);
   }
+  if (opts.kind === "listings") logWhere.push(`al.entity_type NOT IN ${ADMIN_ENTITY_LIST}`);
+  if (opts.kind === "admin") logWhere.push(`al.entity_type IN ${ADMIN_ENTITY_LIST}`);
+  if (opts.noSignIns) logWhere.push("al.action <> 'signed_in'");
   if (opts.until) {
     crmWhere.push("ca.created_at < ?");
     crmParams.push(opts.until);
@@ -92,21 +105,23 @@ export function feedQuery(opts: FeedOpts) {
       NULL AS actor_type, u.name AS actor_name, u.role AS actor_role,
       'client' AS target_type, ca.client_id AS target_id, c.name AS target_name, NULL AS target_sub
     FROM client_activities ca
-    JOIN clients c ON c.id = ca.client_id
+    LEFT JOIN clients c ON c.id = ca.client_id
     LEFT JOIN users u ON u.id = ca.actor_id
     ${where(crmWhere)}`;
   const log = `SELECT 'log' AS src, al.id, al.action AS kind, NULL AS body, al.diff, al.created_at, al.actor_id,
       al.actor_type, u.name AS actor_name, u.role AS actor_role,
-      al.entity_type AS target_type, al.entity_id AS target_id, COALESCE(p.reference_no, b.name, pj.name) AS target_name, p.title AS target_sub
+      al.entity_type AS target_type, al.entity_id AS target_id,
+      COALESCE(p.reference_no, b.name, pj.name, tu.name, tu.email) AS target_name, p.title AS target_sub
     FROM activity_log al
     LEFT JOIN users u ON u.id = al.actor_id
     LEFT JOIN properties p ON al.entity_type = 'property' AND p.id = al.entity_id
     LEFT JOIN builders b ON al.entity_type = 'builder' AND b.id = al.entity_id
     LEFT JOIN projects pj ON al.entity_type = 'project' AND pj.id = al.entity_id
+    LEFT JOIN users tu ON al.entity_type = 'user' AND tu.id = al.entity_id
     ${where(logWhere)}`;
 
   if (opts.kind === "crm") return { sql: crm, params: crmParams };
-  if (opts.kind === "listings") return { sql: log, params: logParams };
+  if (opts.kind === "listings" || opts.kind === "admin") return { sql: log, params: logParams };
   return { sql: `${crm}\nUNION ALL\n${log}`, params: [...crmParams, ...logParams] };
 }
 
@@ -142,7 +157,7 @@ export function topPerformers(since: string) {
   return db.all<Performer>(
     `SELECT u.id, u.name, u.email,
         SUM(ca.type IN (?)) AS touches,
-        COUNT(DISTINCT CASE WHEN ca.type = 'status' AND ca.body LIKE ? THEN ca.client_id END) AS won
+        COUNT(DISTINCT CASE WHEN ca.type = 'status' AND ca.body LIKE ? THEN ${WON_CLIENT} END) AS won
        FROM client_activities ca
        JOIN users u ON u.id = ca.actor_id AND u.role IN ${STAFF}
       WHERE ca.created_at >= ?
@@ -151,6 +166,15 @@ export function topPerformers(since: string) {
       ORDER BY touches DESC, won DESC, u.name
       LIMIT 10`,
     [CONTACT_TYPES, WON_LIKE, since],
+  );
+}
+
+/** Clients moved to "won" since `since`, by everyone or by one staff member. */
+export function wonSince(since: string, userId?: string) {
+  return db.count(
+    `SELECT COUNT(DISTINCT ${WON_CLIENT}) FROM client_activities ca
+      WHERE ca.type = 'status' AND ca.body LIKE ? AND ca.created_at >= ?${userId ? " AND ca.actor_id = ?" : ""}`,
+    userId ? [WON_LIKE, since, userId] : [WON_LIKE, since],
   );
 }
 
@@ -169,13 +193,9 @@ export type AgentStats = {
 export async function agentStats(userId: string, since: string): Promise<AgentStats> {
   const [types, won, openClients, listingActions, last] = await Promise.all([
     db.all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM client_activities WHERE actor_id = ? AND created_at >= ? GROUP BY type", [userId, since]),
-    db.count("SELECT COUNT(DISTINCT client_id) FROM client_activities WHERE actor_id = ? AND type = 'status' AND body LIKE ? AND created_at >= ?", [
-      userId,
-      WON_LIKE,
-      since,
-    ]),
+    wonSince(since, userId),
     db.count("SELECT COUNT(*) FROM clients WHERE assigned_to = ? AND status NOT IN ('won', 'lost')", [userId]),
-    db.count("SELECT COUNT(*) FROM activity_log WHERE actor_id = ? AND created_at >= ?", [userId, since]),
+    db.count(`SELECT COUNT(*) FROM activity_log WHERE actor_id = ? AND created_at >= ? AND entity_type NOT IN ${ADMIN_ENTITY_LIST}`, [userId, since]),
     db.one<{ at: string | null }>(
       `SELECT MAX(x.created_at) AS at FROM (
          SELECT created_at FROM client_activities WHERE actor_id = ?
@@ -292,8 +312,9 @@ export function describe(r: FeedRow, count = 1, fullText = false): Entry {
   const clip = (s: string | null | undefined, max = 140) => (fullText ? (s ?? "").replace(/\s+/g, " ").trim() : excerpt(s, max));
   if (r.src === "crm") {
     const type = r.kind as ClientActivityType;
-    const client = r.target_name ?? "a client";
-    const href = `/admin/clients/${r.target_id}`;
+    // No client row any more: the client was deleted and the entry kept for the team's figures.
+    const client = r.target_name ?? "a deleted client";
+    const href = r.target_name && r.target_id ? `/admin/clients/${r.target_id}` : null;
     const body = clip(r.body);
     if (type === "enquiry" || !r.actor_id) {
       return { actor: client, actorKind: "client", verb: "sent a website enquiry", target: "", href, sub: null, excerpt: body, tone: "enquiry" };
@@ -317,34 +338,98 @@ export function describe(r: FeedRow, count = 1, fullText = false): Entry {
   else verb = LOG_VERBS[r.kind] ?? r.kind.replace(/[_:]/g, " ");
 
   const entity = r.target_type;
+  // What the log entry itself recorded about its target; all that is left once the row is deleted.
+  const saved = r.diff && typeof r.diff === "object" && !Array.isArray(r.diff) ? (r.diff as Record<string, unknown>) : {};
+  const savedText = (key: string) => (typeof saved[key] === "string" && saved[key] ? (saved[key] as string) : "");
+  const exists = r.target_name !== null;
   let target = r.target_name ?? "";
   let href: string | null = null;
+  let sub: string | null = null;
   if (entity === "property") {
-    target ||= "a listing";
-    href = `/admin/properties/${r.target_id}`;
+    target ||= savedText("reference_no") || "a listing";
+    sub = r.target_sub ?? (savedText("title") || null);
+    if (exists) href = `/admin/properties/${r.target_id}`;
   } else if (entity === "builder" || entity === "project") {
+    target ||= savedText("name");
     target = target ? `${entity} ${target}` : `a ${entity}`;
     href = "/admin/builders";
   } else if (entity === "message") {
     target = "a WhatsApp message";
     href = "/admin/messages";
+  } else if (entity === "user") {
+    const self = r.actor_id !== null && r.actor_id === r.target_id;
+    const member = r.kind === "blocked" || r.kind === "unblocked";
+    verb = (self ? SELF_VERBS[r.kind] : undefined) ?? USER_VERBS[r.kind] ?? verb;
+    // "Priya signed in": the person is already the subject.
+    target = self && SELF_VERBS[r.kind] ? "" : target || savedText("name") || (member ? "a member" : "a user");
+    if (target && exists) href = member ? "/admin/members" : `/admin/users/${r.target_id}`;
+  } else if (entity === "settings") {
+    verb = SETTINGS_VERBS[r.kind] ?? verb;
+    target = "";
+  } else if (entity === "client") {
+    verb = "deleted client";
+    target = savedText("name") || "a client";
   } else {
     target ||= entity;
   }
 
-  const tone = base === "approved" || base === "change_approved" ? "approved" : base === "rejected" || base === "change_rejected" || base === "expired" ? "rejected" : base === "submitted" || base === "change_requested" ? "submitted" : "listing";
-  const showDiff = entity === "property";
+  const tone = TONE_BY_ACTION[base] ?? "listing";
+  const showDiff = entity === "property" || entity === "user" || entity === "settings";
   return {
     actor,
     actorKind,
     verb,
     target,
     href,
-    sub: entity === "property" ? r.target_sub : null,
+    sub,
     excerpt: showDiff ? clip(summariseDiff(r.kind, r.diff, DIFF_FORMAT), 220) : "",
     tone,
   };
 }
+
+/** Account entries about someone else: "<admin> deactivated <user>". */
+const USER_VERBS: Record<string, string> = {
+  created: "added",
+  edited: "edited the account of",
+  deactivated: "deactivated",
+  reactivated: "reactivated",
+  blocked: "blocked member",
+  unblocked: "unblocked member",
+  invite_sent: "sent a sign-in invite to",
+};
+
+/** Account entries where the person acted on their own account; no target is shown. */
+const SELF_VERBS: Record<string, string> = {
+  signed_in: "signed in",
+  password_changed: "changed their password",
+  password_reset: "reset their password by email",
+};
+
+const SETTINGS_VERBS: Record<string, string> = {
+  settings_changed: "changed the organization settings",
+  signed_out_all: "signed out all staff",
+  whatsapp_connected: "connected WhatsApp",
+  whatsapp_disconnected: "disconnected WhatsApp",
+};
+
+/** Timeline dot category by action (the part before any ":"); anything else is "listing". */
+const TONE_BY_ACTION: Record<string, string> = {
+  approved: "approved",
+  change_approved: "approved",
+  reactivated: "approved",
+  unblocked: "approved",
+  rejected: "rejected",
+  change_rejected: "rejected",
+  expired: "rejected",
+  deleted: "rejected",
+  deactivated: "rejected",
+  blocked: "rejected",
+  submitted: "submitted",
+  change_requested: "submitted",
+  signed_in: "account",
+  password_changed: "account",
+  password_reset: "account",
+};
 
 /** Timeline dot colours by entry category. */
 export const DOT: Record<string, string> = {
@@ -361,4 +446,5 @@ export const DOT: Record<string, string> = {
   rejected: "bg-[var(--s-late)]",
   submitted: "bg-amber-400",
   listing: "bg-zinc-400",
+  account: "bg-zinc-300",
 };

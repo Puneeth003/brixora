@@ -110,6 +110,36 @@ test("other listing entries keep their own wording", () => {
   assert.equal(summariseDiff("approved", null, fmt), "");
 });
 
+test("account and settings entries read plainly", () => {
+  assert.equal(summariseDiff("signed_in", { ip: "203.0.113.7" }, fmt), "From 203.0.113.7");
+  assert.equal(summariseDiff("signed_in", { ip: null }, fmt), "");
+  assert.equal(summariseDiff("created", { name: "Priya", role: "agent" }, fmt), "Role agent");
+  assert.equal(summariseDiff("invite_sent", { delivered: false }, fmt), "The invite could not be delivered");
+  assert.equal(summariseDiff("invite_sent", { delivered: true }, fmt), "");
+  assert.equal(summariseDiff("whatsapp_connected", { number: "+91 98000 00000" }, fmt), "+91 98000 00000");
+  assert.equal(
+    summariseDiff("edited", { role: { from: "agent", to: "admin" }, password: "reset" }, fmt),
+    "Role agent → admin · Password reset",
+  );
+  assert.equal(
+    summariseDiff("settings_changed", { require_site_verification: { from: "1", to: "0" }, listing_expiry_days: { from: "60", to: "90" } }, fmt),
+    "Require site verification on → off · Listing expiry days 60 → 90",
+  );
+});
+
+test("a deleted item's saved name is not repeated as a detail line", () => {
+  assert.equal(summariseDiff("deleted", { reference_no: "BRX-2026-0009", title: "Flat for sale", status: "archived" }, fmt), "");
+  assert.equal(summariseDiff("deleted", { name: "Ramesh Kotian" }, fmt), "");
+});
+
+test("the area filter offers accounts and settings, and its action filters stay on the log half", () => {
+  assert.equal(parseFeedFilters({ kind: "admin" }, anyone).kind, "admin");
+  for (const value of ["accounts", "signins", "settings"]) {
+    const a = ACTION_FILTERS.find((x) => x.value === value);
+    assert.ok(a?.log && a.crm === null, value);
+  }
+});
+
 test("photo uploads in a row become one entry", () => {
   const at = (min) => new Date(Date.parse("2026-10-27T06:00:00Z") - min * 60_000).toISOString();
   const photo = (min, over = {}) => ({ src: "log", kind: "photo_uploaded", actor_id: "u1", target_id: "p1", created_at: at(min), ...over });

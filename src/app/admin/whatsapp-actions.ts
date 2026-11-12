@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logActivity, SETTINGS_ENTITY_ID } from "@/lib/activity";
 import { requireAdmin } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
 import { db } from "@/lib/db";
@@ -48,7 +49,7 @@ async function requestSync(token: string, phoneNumberId: string) {
 }
 
 export async function connectWhatsApp(input: { code: string; wabaId: string; phoneNumberId?: string }): Promise<ActionState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const appId = process.env.META_APP_ID;
   const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (!appId || !appSecret) return { ok: false, error: "META_APP_ID and WHATSAPP_APP_SECRET must be set." };
@@ -89,6 +90,14 @@ export async function connectWhatsApp(input: { code: string; wabaId: string; pho
       ["wa_connected_at", new Date().toISOString()],
     ];
     for (const [name, value] of values) await setConfig(name, value);
+    await logActivity({
+      entityType: "settings",
+      entityId: SETTINGS_ENTITY_ID,
+      action: "whatsapp_connected",
+      actorType: "admin",
+      actorId: admin.userId,
+      diff: { number: number.display_phone_number ?? null },
+    });
 
     const syncErrors = await requestSync(token, phoneNumberId);
     revalidatePath("/admin/settings");
@@ -102,13 +111,21 @@ export async function connectWhatsApp(input: { code: string; wabaId: string; pho
 
 /** Forgets the connected number. Sending falls back to WHATSAPP_TOKEN, if set. The phone app keeps working. */
 export async function disconnectWhatsApp(): Promise<ActionState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const conn = await whatsappConnection();
   if (conn?.source === "connected" && conn.wabaId) {
     // Best effort: stop webhooks for this WABA.
     await call(graph(`${conn.wabaId}/subscribed_apps`), { method: "DELETE", token: conn.token }).catch(() => {});
   }
   await db.run("DELETE FROM app_config WHERE name LIKE 'wa\\_%'");
+  await logActivity({
+    entityType: "settings",
+    entityId: SETTINGS_ENTITY_ID,
+    action: "whatsapp_disconnected",
+    actorType: "admin",
+    actorId: admin.userId,
+    diff: { number: conn?.displayPhone ?? null },
+  });
   revalidatePath("/admin/settings");
   return { ok: true, message: "WhatsApp disconnected." };
 }

@@ -504,8 +504,10 @@ export async function saveBuilder(_prev: ActionState, formData: FormData): Promi
 
 export async function deleteBuilder(id: string) {
   const admin = await requireAdmin();
+  // The name goes in the log: the row it would be read from is about to go.
+  const builder = await db.one<{ name: string }>("SELECT name FROM builders WHERE id = ?", [id]);
   await db.run("DELETE FROM builders WHERE id = ?", [id]);
-  await logActivity({ entityType: "builder", entityId: id, action: "deleted", actorType: "admin", actorId: admin.userId });
+  await logActivity({ entityType: "builder", entityId: id, action: "deleted", actorType: "admin", actorId: admin.userId, diff: builder ? { name: builder.name } : null });
   invalidate();
 }
 
@@ -539,8 +541,9 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
 
 export async function deleteProject(id: string) {
   const admin = await requireAdmin();
+  const project = await db.one<{ name: string }>("SELECT name FROM projects WHERE id = ?", [id]);
   await db.run("DELETE FROM projects WHERE id = ?", [id]);
-  await logActivity({ entityType: "project", entityId: id, action: "deleted", actorType: "admin", actorId: admin.userId });
+  await logActivity({ entityType: "project", entityId: id, action: "deleted", actorType: "admin", actorId: admin.userId, diff: project ? { name: project.name } : null });
   invalidate();
 }
 

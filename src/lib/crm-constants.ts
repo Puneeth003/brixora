@@ -10,6 +10,13 @@ export const CLIENT_STATUSES: { value: ClientStatus; label: string; color: strin
   { value: "lost", label: "Lost", color: "bg-zinc-200 text-zinc-700" },
 ];
 
+/**
+ * SQL LIKE pattern for a "won" status entry on a client's timeline. Those entries read
+ * "<from> → <to>" using the labels above, so the pattern is built from the same label
+ * and a renamed status keeps being counted.
+ */
+export const WON_BODY_LIKE = `%→ ${CLIENT_STATUSES.find((s) => s.value === "won")?.label ?? "Won"}`;
+
 export const CLIENT_TYPES: { value: ClientType; label: string }[] = [
   { value: "buyer", label: "Buyer" },
   { value: "tenant", label: "Tenant" },

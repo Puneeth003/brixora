@@ -4,13 +4,17 @@
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const DAY_MS = 86_400_000;
 
-export type Kind = "all" | "crm" | "listings";
+export type Kind = "all" | "crm" | "listings" | "admin";
 
 export const KINDS: { value: Kind; label: string }[] = [
   { value: "all", label: "All activity" },
   { value: "crm", label: "Clients (CRM)" },
   { value: "listings", label: "Listings" },
+  { value: "admin", label: "Accounts & settings" },
 ];
+
+/** activity_log entity types shown under "Accounts & settings"; every other type is a listing entry. */
+export const ADMIN_ENTITIES = ["user", "settings", "client"] as const;
 
 /**
  * Action-type filter. `crm` / `log` are fixed SQL conditions on that half of the feed
@@ -28,9 +32,12 @@ export const ACTION_FILTERS: { value: string; label: string; crm: string | null;
     value: "edits",
     label: "Edits & photos",
     crm: null,
-    log: "(al.action IN ('edited', 'created', 'featured', 'unfeatured', 'expiry_extended', 'restored') OR al.action LIKE 'photo_%')",
+    log: "(al.entity_type NOT IN ('user', 'settings') AND (al.action IN ('edited', 'created', 'featured', 'unfeatured', 'expiry_extended', 'restored') OR al.action LIKE 'photo_%'))",
   },
   { value: "removals", label: "Sold, removed & expired", crm: null, log: "al.action IN ('sold', 'archived', 'removed_from_website', 'deleted', 'expired')" },
+  { value: "accounts", label: "Users & access", crm: null, log: "(al.entity_type = 'user' AND al.action <> 'signed_in')" },
+  { value: "signins", label: "Sign-ins", crm: null, log: "al.action = 'signed_in'" },
+  { value: "settings", label: "Settings", crm: null, log: "al.entity_type = 'settings'" },
 ];
 
 export type Period = "week" | "month" | "quarter";
@@ -165,6 +172,8 @@ function shortValue(key: string, v: unknown, fmt: DiffFormat): string | null {
   if (typeof v === "boolean") return v ? "yes" : "no";
   if (typeof v === "number") return MONEY_KEY.test(key) ? fmt.price(v) : String(v);
   if (typeof v === "string") {
+    // Switches kept as "0" / "1" in app_config.
+    if (key.startsWith("require_") && (v === "0" || v === "1")) return v === "1" ? "on" : "off";
     if (DATE_KEY.test(key) && !Number.isNaN(new Date(v).getTime())) return fmt.date(v);
     if (v.length > LONG_TEXT) return null;
     // Stored codes such as "under_construction" read better with spaces.
@@ -178,7 +187,8 @@ function changedFields(d: Record<string, unknown>, fmt: DiffFormat) {
   const keys = Object.keys(d).filter((k) => k !== "request_id");
   const parts = keys.slice(0, MAX_FIELDS).map((key) => {
     const v = d[key];
-    if (!isChange(v)) return fieldLabel(key);
+    // A plain note rather than a from/to pair, e.g. { password: "reset" }.
+    if (!isChange(v)) return typeof v === "string" && v.length <= LONG_TEXT ? `${fieldLabel(key)} ${v}` : fieldLabel(key);
     const from = shortValue(key, v.from, fmt);
     const to = shortValue(key, v.to, fmt);
     return from === null || to === null ? `${fieldLabel(key)} updated` : `${fieldLabel(key)} ${from} → ${to}`;
@@ -198,7 +208,12 @@ export function summariseDiff(action: string, diff: unknown, fmt: DiffFormat): s
     return [when, who].filter(Boolean).join(" · ");
   }
   if (action === "verified_on_site" || action === "verification_issues") return typeof d.notes === "string" ? d.notes : "";
-  if (action === "deleted") return typeof d.title === "string" ? d.title : "";
+  // The name and title of a deleted item are shown as the entry's target instead.
+  if (action === "deleted") return "";
+  if (action === "signed_in") return typeof d.ip === "string" && d.ip ? `From ${d.ip}` : "";
+  if (action === "whatsapp_connected" || action === "whatsapp_disconnected") return typeof d.number === "string" ? d.number : "";
+  if (action === "invite_sent") return d.delivered === false ? "The invite could not be delivered" : "";
+  if (action === "created" && typeof d.role === "string") return `Role ${d.role}`;
   if (typeof d.price === "number") return `New price ${fmt.price(d.price)}`;
   if (action.endsWith(":sold")) return "Marked as sold";
   return changedFields(d, fmt);
@@ -216,7 +231,7 @@ export const BURST_VERBS: Record<string, (n: number) => string> = {
   photo_shown: (n) => `unhid ${n} photos on`,
 };
 
-type BurstRow = { src: string; kind: string; actor_id: string | null; target_id: string; created_at: string };
+type BurstRow = { src: string; kind: string; actor_id: string | null; target_id: string | null; created_at: string };
 
 /**
  * Folds runs of the same photo action by the same person on the same listing into one

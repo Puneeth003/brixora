@@ -1,6 +1,7 @@
 "use server";
 
-import { adminMfaRequired, checkStaff, markSessionMfaVerified, recordAttempt, startSession, tooManyAttempts } from "@/lib/auth";
+import { logActivity } from "@/lib/activity";
+import { adminMfaRequired, checkStaff, clientIp, markSessionMfaVerified, recordAttempt, startSession, tooManyAttempts } from "@/lib/auth";
 import { db, dbConfigured, transaction, uuid } from "@/lib/db";
 import { authSecretConfigured, encrypt, hashPassword, hmac, newTotpSecret, randomDigits, randomToken, safeEqual, sha256, tryDecrypt, verifyPassword, verifyTotp } from "@/lib/crypto";
 import { passwordChangedEmail, passwordResetEmail, sendMail } from "@/lib/mail";
@@ -24,6 +25,11 @@ function findStaff(email: string) {
   );
 }
 
+/** A completed staff sign-in (after the 2FA code, when 2FA is on), for the activity log. */
+async function logSignIn(userId: string) {
+  await logActivity({ entityType: "user", entityId: userId, action: "signed_in", actorType: "admin", actorId: userId, diff: { ip: await clientIp() } });
+}
+
 export async function adminLogin(rawEmail: string, password: string): Promise<LoginResult> {
   if (!dbConfigured) return { ok: false, error: "The database is not configured yet." };
   const email = normEmail(rawEmail);
@@ -40,6 +46,7 @@ export async function adminLogin(rawEmail: string, password: string): Promise<Lo
 
   if (!adminMfaRequired) {
     await startSession("admin", user.id);
+    await logSignIn(user.id);
     return { ok: true, next: "/admin" };
   }
 
@@ -78,6 +85,7 @@ export async function verifyAdminTotp(code: string): Promise<Result> {
 
   await db.update("users", { totp_enabled: true, totp_last_step: step }, "id = ?", [check.userId]);
   await markSessionMfaVerified();
+  await logSignIn(check.userId);
   return { ok: true };
 }
 
@@ -207,6 +215,7 @@ export async function resetPassword(rawEmail: string, token: string, password: s
     // Clear the sign-in lockout for this email.
     await tx.run("DELETE FROM auth_attempts WHERE kind = 'admin_password' AND identifier = ? AND success = 0", [email]);
   });
+  await logActivity({ entityType: "user", entityId: user.id, action: "password_reset", actorType: "admin", actorId: user.id });
   await sendMail({ to: user.email, ...passwordChangedEmail({ name: user.name }) }).catch((e) => console.error("[reset] notice failed", e));
   return { ok: true };
 }

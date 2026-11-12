@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireStaff } from "@/lib/auth";
+import { diffFields, logActivity, SETTINGS_ENTITY_ID } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { mailConfigured, sendMail, testEmail, mailErrorReason } from "@/lib/mail";
 import type { ActionState } from "@/lib/types";
@@ -25,7 +26,7 @@ export async function updateStaffProfile(_prev: ActionState, formData: FormData)
 
 /** Theme colours, listing expiry and reference prefix (app_config). */
 export async function saveOrganization(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const brand = str(formData, "brand_color").toLowerCase();
   const sidebar = str(formData, "sidebar_color").toLowerCase();
   const expiryRaw = str(formData, "listing_expiry_days");
@@ -45,8 +46,13 @@ export async function saveOrganization(_prev: ActionState, formData: FormData): 
     ["ref_prefix", prefix],
     ["require_site_verification", requireVerification],
   ];
+  const before = await db.all<{ name: string; value: string }>("SELECT name, value FROM app_config WHERE name IN (?)", [values.map(([name]) => name)]);
   for (const [name, value] of values) {
     await db.run("INSERT INTO app_config (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [name, value]);
+  }
+  const changes = diffFields(Object.fromEntries(before.map((r) => [r.name, r.value])), Object.fromEntries(values));
+  if (Object.keys(changes).length) {
+    await logActivity({ entityType: "settings", entityId: SETTINGS_ENTITY_ID, action: "settings_changed", actorType: "admin", actorId: admin.userId, diff: changes });
   }
   revalidatePath("/admin", "layout");
   return { ok: true, message: "Organization settings saved." };
@@ -54,9 +60,10 @@ export async function saveOrganization(_prev: ActionState, formData: FormData): 
 
 /** Ends every staff session (including the caller's) and sends the caller to the login page. */
 export async function signOutAllStaff(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   if (formData.get("confirm") !== "yes") redirect("/admin/settings?section=security");
   await db.run("DELETE FROM sessions WHERE kind = 'admin'");
+  await logActivity({ entityType: "settings", entityId: SETTINGS_ENTITY_ID, action: "signed_out_all", actorType: "admin", actorId: admin.userId });
   redirect("/admin/login");
 }
 

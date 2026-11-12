@@ -1,8 +1,12 @@
 import "server-only";
 import { db, uuid } from "./db";
 
+/** entity_id for workspace-wide entries (entityType "settings"), which have no row of their own. */
+export const SETTINGS_ENTITY_ID = "00000000-0000-0000-0000-000000000000";
+
 export async function logActivity(entry: {
-  entityType: "property" | "change_request" | "enquiry" | "builder" | "project" | "message";
+  /** "user": a staff or member account. "client": a CRM client (deletions only). "settings": workspace settings. */
+  entityType: "property" | "change_request" | "enquiry" | "builder" | "project" | "message" | "user" | "client" | "settings";
   entityId: string;
   action: string;
   actorType: "admin" | "owner" | "system";

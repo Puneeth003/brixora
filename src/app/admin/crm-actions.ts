@@ -13,7 +13,8 @@ import { passwordProblem } from "@/lib/password";
 import { parseIstInput } from "@/lib/time";
 import { site } from "@/lib/site";
 import { notify, whatsappConnection } from "@/lib/whatsapp";
-import { CLIENT_STATUSES, label } from "@/lib/crm-constants";
+import { CLIENT_STATUSES, WON_BODY_LIKE, label } from "@/lib/crm-constants";
+import { diffFields, logActivity } from "@/lib/activity";
 import type { ActionState, ClientStatus } from "@/lib/types";
 
 // CRM actions. Every action re-checks the session; agents can only touch clients
@@ -226,8 +227,19 @@ export async function markListingShared(clientId: string, propertyId: string) {
 }
 
 export async function deleteClient(id: string) {
-  await requireAdmin();
-  if (isUuid(id)) await db.run("DELETE FROM clients WHERE id = ?", [id]);
+  const admin = await requireAdmin();
+  const client = isUuid(id) ? await db.one<{ id: string; name: string }>("SELECT id, name FROM clients WHERE id = ?", [id]) : null;
+  if (client) {
+    // With migration 007 the timeline rows outlive the client (client_id becomes NULL), so
+    // the agents' contact and win counts stay. Strip what was written about the person
+    // first; only "… → Won" status lines are kept, because wins are counted from them.
+    await db.run("UPDATE client_activities SET body = CASE WHEN type = 'status' AND body LIKE ? THEN body ELSE NULL END WHERE client_id = ?", [
+      WON_BODY_LIKE,
+      client.id,
+    ]);
+    await db.run("DELETE FROM clients WHERE id = ?", [client.id]);
+    await logActivity({ entityType: "client", entityId: client.id, action: "deleted", actorType: "admin", actorId: admin.userId, diff: { name: client.name } });
+  }
   redirect("/admin/clients");
 }
 
@@ -322,15 +334,31 @@ export async function saveAgent(_prev: ActionState, formData: FormData): Promise
 
   let userId = id;
   if (id) {
-    const before = await db.one<{ id: string; role: string; email: string | null }>("SELECT id, role, email FROM users WHERE id = ? AND role IN ('admin', 'agent')", [id]);
+    const before = await db.one<Record<string, unknown> & { role: string; email: string | null }>(
+      "SELECT name, email, work_phone, role, agent_type, company, rera_no, commission_pct, notes FROM users WHERE id = ? AND role IN ('admin', 'agent')",
+      [id],
+    );
     if (!before) return { ok: false, error: "Agent not found." };
     if (id === admin.userId && data.role !== "admin") return { ok: false, error: "You can't remove your own admin access." };
     await db.update("users", data, "id = ?", [id]);
     // A changed email or role signs the account out everywhere.
     if (before.email !== data.email || before.role !== data.role) await db.run("DELETE FROM sessions WHERE user_id = ?", [id]);
+    const changes: Record<string, unknown> = diffFields(before, data);
+    if (password) changes.password = "reset";
+    if (Object.keys(changes).length) {
+      await logActivity({ entityType: "user", entityId: id, action: "edited", actorType: "admin", actorId: admin.userId, diff: changes });
+    }
   } else {
     userId = uuid();
     await db.insert("users", { id: userId, ...data, is_active: true });
+    await logActivity({
+      entityType: "user",
+      entityId: userId,
+      action: "created",
+      actorType: "admin",
+      actorId: admin.userId,
+      diff: { name: data.name, role: data.role },
+    });
   }
   if (password) {
     await db.update("users", { password_hash: await hashPassword(password), password_changed_at: new Date() }, "id = ?", [userId]);
@@ -388,9 +416,10 @@ async function sendInvite(userId: string): Promise<{ ok: boolean; message: strin
 }
 
 export async function sendAgentWelcome(id: string) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   if (!isUuid(id)) return;
   const res = await sendInvite(id);
+  await logActivity({ entityType: "user", entityId: id, action: "invite_sent", actorType: "admin", actorId: admin.userId, diff: { delivered: res.ok } });
   revalidatePath("/admin", "layout");
   redirect(`/admin/users/${id}?${res.ok ? "saved" : "error"}=${encodeURIComponent(res.message)}`);
 }
@@ -398,8 +427,11 @@ export async function sendAgentWelcome(id: string) {
 export async function setStaffActive(id: string, active: boolean) {
   const admin = await requireAdmin();
   if (!isUuid(id) || id === admin.userId) return;
-  await db.update("users", { is_active: active }, "id = ? AND role IN ('admin', 'agent')", [id]);
+  const changed = await db.update("users", { is_active: active }, "id = ? AND role IN ('admin', 'agent')", [id]);
   if (!active) await db.run("DELETE FROM sessions WHERE user_id = ?", [id]);
+  if (changed) {
+    await logActivity({ entityType: "user", entityId: id, action: active ? "reactivated" : "deactivated", actorType: "admin", actorId: admin.userId });
+  }
   revalidatePath("/admin", "layout");
 }
 
@@ -408,10 +440,13 @@ export async function setStaffActive(id: string, active: boolean) {
 // ---------------------------------------------------------------------------
 
 export async function setMemberActive(id: string, active: boolean) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   if (!isUuid(id)) return;
-  await db.update("users", { is_active: active }, "id = ? AND role = 'owner'", [id]);
+  const changed = await db.update("users", { is_active: active }, "id = ? AND role = 'owner'", [id]);
   if (!active) await db.run("DELETE FROM sessions WHERE user_id = ?", [id]);
+  if (changed) {
+    await logActivity({ entityType: "user", entityId: id, action: active ? "unblocked" : "blocked", actorType: "admin", actorId: admin.userId });
+  }
   revalidatePath("/admin", "layout");
 }
 
@@ -462,6 +497,7 @@ export async function changeOwnPassword(_prev: ActionState, formData: FormData):
   await db.update("users", { password_hash: await hashPassword(next), password_changed_at: new Date() }, "id = ?", [staff.userId]);
   // Sign out everywhere, including here, so a leaked session dies with the old password.
   await db.run("DELETE FROM sessions WHERE user_id = ?", [staff.userId]);
+  await logActivity({ entityType: "user", entityId: staff.userId, action: "password_changed", actorType: "admin", actorId: staff.userId });
   if (mailConfigured || process.env.NODE_ENV !== "production") {
     await sendMail({ to: staff.email, ...passwordChangedEmail({ name: u?.name ?? null }) }).catch(() => {});
   }

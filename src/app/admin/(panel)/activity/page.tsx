@@ -33,7 +33,7 @@ import {
   initials,
   istDateTime,
   topPerformers,
-  WON_LIKE,
+  wonSince,
   type Entry,
   type FeedOpts,
 } from "./feed";
@@ -89,9 +89,9 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
       : Promise.all([
           db.count("SELECT COUNT(*) FROM users WHERE role IN ('admin', 'agent') AND is_active = 1"),
           activeStaffSince(todayIso),
-          countFeed({ kind: "all", since: todayIso, staffOnly: true }),
-          countFeed({ kind: "all", since: weekIso, staffOnly: true }),
-          db.count("SELECT COUNT(DISTINCT client_id) FROM client_activities WHERE type = 'status' AND body LIKE ? AND created_at >= ?", [WON_LIKE, monthIso]),
+          countFeed({ kind: "all", since: todayIso, staffOnly: true, noSignIns: true }),
+          countFeed({ kind: "all", since: weekIso, staffOnly: true, noSignIns: true }),
+          wonSince(monthIso),
         ]),
   ]);
   const pages = Math.max(1, Math.ceil(feed.total / PER_PAGE));
@@ -130,7 +130,7 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
       <form key={toQueryString(query)} className="card mb-6 flex flex-wrap items-end gap-3 p-4">
         <label className="min-w-[200px] flex-[2]">
           <span className="label">Search</span>
-          <input name="q" type="search" defaultValue={filters.q} maxLength={80} placeholder="Client name or listing reference" className="input" />
+          <input name="q" type="search" defaultValue={filters.q} maxLength={80} placeholder="Client, listing reference or user" className="input" />
         </label>
         <label className="min-w-[150px] flex-1">
           <span className="label">Person</span>
