@@ -13,6 +13,8 @@ import { ACTIVITY_TYPES, CLIENT_SOURCES, label } from "@/lib/crm-constants";
 import { PropertyStatusBadge } from "@/components/StatusBadge";
 import { ClientStatusBadge, FollowUp, requirementSummary } from "@/components/crm/ClientBadges";
 import { ActivityForm, ClientForm, ReplyForm, StatusForm } from "@/components/crm/forms";
+import { ShareListingActions } from "@/components/crm/MatchActions";
+import { isNewListing } from "@/lib/match";
 import { deleteClient, markEnquiryRead } from "../../../crm-actions";
 import type { ClientActivity, EnquiryMessage, PropertyStatus } from "@/lib/types";
 
@@ -83,6 +85,8 @@ export default async function ClientPage({ params }: PageProps<"/admin/clients/[
     ...matches.map((m) => ({ id: m.id, label: `${m.reference_no} · ${m.title}` })),
   ].filter((p, i, all) => all.findIndex((x) => x.id === p.id) === i);
   const wa = `https://wa.me/${c.phone}`;
+  // Listings already shared with, enquired about or visited by this client.
+  const onTimeline = new Set([c.property_id, ...activities.map((a) => a.property_id)].filter(Boolean));
 
   const initials =
     c.name
@@ -274,27 +278,33 @@ export default async function ClientPage({ params }: PageProps<"/admin/clients/[
                 {matches.map((m) => {
                   const img = publicImageUrl(m.cover_path);
                   return (
-                    <li key={m.id}>
-                      <Link
-                        href={`/properties/${m.reference_no}`}
-                        target="_blank"
-                        className="flex items-center gap-3 rounded-[20px] bg-white p-2.5 pr-4 shadow-[var(--s-shadow)] transition hover:shadow-[var(--s-shadow-lg)]"
-                      >
+                    <li key={m.id} className="rounded-[20px] bg-white p-2.5 shadow-[var(--s-shadow)] transition hover:shadow-[var(--s-shadow-lg)]">
+                      <Link href={`/properties/${m.reference_no}`} target="_blank" className="flex items-center gap-3 pr-1.5">
                         <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-xl bg-[var(--s-seg)]">
                           {img && <Image src={img} alt="" fill sizes="80px" className="object-cover" />}
                         </div>
                         <div className="min-w-0 text-sm">
-                          <p className="truncate font-bold">{m.title}</p>
+                          <p className="flex items-center gap-1.5 font-bold">
+                            <span className="truncate">{m.title}</span>
+                            {isNewListing(m.approved_at, now) && <span className="badge shrink-0 bg-[var(--s-brand-soft)] text-[var(--brand)]">New</span>}
+                          </p>
                           <p className="text-[var(--s-muted)]">
                             {formatPrice(m.price, m.listing_type)} · {m.locality}
                           </p>
                         </div>
                       </Link>
+                      <div className="mt-2.5 border-t border-[var(--s-border)] px-1 pt-2.5">
+                        {onTimeline.has(m.id) ? (
+                          <p className="text-xs font-semibold text-[var(--s-muted)]">Already on this client&apos;s timeline</p>
+                        ) : (
+                          <ShareListingActions client={c} listing={m} />
+                        )}
+                      </div>
                     </li>
                   );
                 })}
               </ul>
-              <p className="px-1 text-xs text-[var(--s-muted)]">Based on the requirements in Details. Share a link on WhatsApp, then log it.</p>
+              <p className="px-1 text-xs text-[var(--s-muted)]">Based on the requirements in Details. Share on WhatsApp, then mark it as shared to log it.</p>
             </section>
           )}
 

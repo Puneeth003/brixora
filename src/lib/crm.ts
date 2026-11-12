@@ -1,7 +1,8 @@
 import "server-only";
 import { db, uuid, type Db } from "./db";
 import type { Staff } from "./auth";
-import type { Client, ClientActivityType, ListingType } from "./types";
+import { fitsClient, inPreferredLocality, NEW_MATCH_DAYS, type MatchListing } from "./match";
+import type { Client, ClientActivityType, ListingType, PropertyType } from "./types";
 
 // CRM data rules. Admins see every client; an agent sees only the clients assigned to
 // them. Every CRM page and action goes through clientScope / loadClientFor.
@@ -96,6 +97,7 @@ export type MatchRow = {
   locality: string;
   bedrooms: number | null;
   cover_path: string | null;
+  approved_at: string | null;
 };
 
 /** Live listings that fit a buyer/tenant's requirements, best matches first. */
@@ -132,11 +134,84 @@ export async function matchingListings(c: Client, limit = 6) {
   const rank = localities.length ? `(locality IN (?)) DESC,` : "";
   if (localities.length) values.push(localities);
   return db.all<MatchRow>(
-    `SELECT id, reference_no, title, price, listing_type, locality, bedrooms, cover_path FROM public_properties
+    `SELECT id, reference_no, title, price, listing_type, locality, bedrooms, cover_path, approved_at FROM public_properties
       ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
       ORDER BY ${rank} featured DESC, approved_at DESC LIMIT ?`,
     [...values, limit],
   );
+}
+
+// ---------------------------------------------------------------------------
+// Listing → clients (the reverse of matchingListings). The rule lives in match.ts.
+// ---------------------------------------------------------------------------
+
+type LookingClient = Client & { agent_name: string | null };
+type ListingForMatch = MatchRow & { property_type: PropertyType };
+
+/** Clients still looking, within what this staff member may see (all of them when `staff` is omitted: admin pages only). */
+function lookingClients(staff?: Staff) {
+  const scope = staff ? clientScope(staff) : { sql: "1 = 1", values: [] };
+  return db.all<LookingClient>(
+    `SELECT c.*, u.name AS agent_name FROM clients c LEFT JOIN users u ON u.id = c.assigned_to
+      WHERE ${scope.sql} AND c.status NOT IN ('won', 'lost') AND c.type NOT IN ('seller', 'landlord')
+      ORDER BY c.updated_at DESC LIMIT 2000`,
+    scope.values,
+  );
+}
+
+/** "client:property" for every pair already on a timeline (shared, enquired about, visited…). */
+async function contactedPairs(propertyIds: string[]) {
+  if (!propertyIds.length) return new Set<string>();
+  const rows = await db.all<{ client_id: string; property_id: string }>(
+    "SELECT DISTINCT client_id, property_id FROM client_activities WHERE property_id IN (?)",
+    [propertyIds],
+  );
+  return new Set(rows.map((r) => `${r.client_id}:${r.property_id}`));
+}
+
+export type NewMatch = { client: LookingClient; listing: ListingForMatch; preferred: boolean };
+
+/**
+ * Recently approved listings paired with the clients they suit, for the dashboard.
+ * A pair drops off once that listing is on the client's timeline (shared, enquiry,
+ * visit) or is already the listing they are interested in.
+ */
+export async function newMatchesFor(staff: Staff, now: number, limit = 6): Promise<{ rows: NewMatch[]; total: number }> {
+  const listings = await db.all<ListingForMatch>(
+    `SELECT id, reference_no, title, price, listing_type, property_type, locality, bedrooms, cover_path, approved_at
+       FROM public_properties WHERE approved_at >= ? ORDER BY approved_at DESC LIMIT 100`,
+    [new Date(now - NEW_MATCH_DAYS * 86_400_000)],
+  );
+  if (!listings.length) return { rows: [], total: 0 };
+
+  const [clients, contacted] = await Promise.all([lookingClients(staff), contactedPairs(listings.map((l) => l.id))]);
+  const pairs: NewMatch[] = [];
+  for (const listing of listings) {
+    const forMatch = { ...listing, price: Number(listing.price) };
+    for (const client of clients) {
+      if (client.property_id === listing.id || contacted.has(`${client.id}:${listing.id}`)) continue;
+      if (fitsClient(client, forMatch)) pairs.push({ client, listing, preferred: inPreferredLocality(client, listing) });
+    }
+  }
+  // Preferred-locality matches first; within each group the newest listing first (already the listing order).
+  pairs.sort((a, b) => Number(b.preferred) - Number(a.preferred));
+  return { rows: pairs.slice(0, limit), total: pairs.length };
+}
+
+export type ClientForListing = LookingClient & { preferred: boolean; contacted: boolean };
+
+/** Every client a listing suits, the ones not yet told about it first. Admin pages only: not scoped to an agent. */
+export async function matchingClientsFor(listing: MatchListing & { id: string }): Promise<ClientForListing[]> {
+  const [clients, contacted] = await Promise.all([lookingClients(), contactedPairs([listing.id])]);
+  const forMatch = { ...listing, price: Number(listing.price) };
+  return clients
+    .filter((c) => fitsClient(c, forMatch))
+    .map((c) => ({
+      ...c,
+      preferred: inPreferredLocality(c, listing),
+      contacted: c.property_id === listing.id || contacted.has(`${c.id}:${listing.id}`),
+    }))
+    .sort((a, b) => Number(a.contacted) - Number(b.contacted) || Number(b.preferred) - Number(a.preferred));
 }
 
 /** Active staff for assignment pickers. */

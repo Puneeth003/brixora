@@ -191,6 +191,40 @@ export async function addClientActivity(_prev: ActionState, formData: FormData):
   return { ok: true, message: "Logged." };
 }
 
+/**
+ * "Mark as shared": the staff member sent this listing to the client themselves (WhatsApp
+ * link); record it on the timeline. That is also what takes the pair off "New matches".
+ */
+export async function markListingShared(clientId: string, propertyId: string) {
+  const staff = await requireStaff();
+  const client = await loadClientFor(staff, clientId);
+  if (!client || !isUuid(propertyId)) return;
+  // Live listings only, read through the public view.
+  const listing = await db.one<{ id: string; reference_no: string; title: string }>(
+    "SELECT id, reference_no, title FROM public_properties WHERE id = ?",
+    [propertyId],
+  );
+  if (!listing) return;
+
+  await logClientActivity({
+    clientId: client.id,
+    type: "whatsapp",
+    body: `Shared listing ${listing.reference_no} · ${listing.title}`,
+    propertyId: listing.id,
+    actorId: staff.userId,
+  });
+  if (client.status === "new") {
+    await logClientActivity({
+      clientId: client.id,
+      type: "status",
+      body: `${label(CLIENT_STATUSES, "new")} → ${label(CLIENT_STATUSES, "contacted")}`,
+      actorId: staff.userId,
+    });
+  }
+  await db.update("clients", { last_contact_at: new Date(), ...(client.status === "new" ? { status: "contacted" } : {}) }, "id = ?", [client.id]);
+  revalidatePath("/admin", "layout");
+}
+
 export async function deleteClient(id: string) {
   await requireAdmin();
   if (isUuid(id)) await db.run("DELETE FROM clients WHERE id = ?", [id]);

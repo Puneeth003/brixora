@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { requireStaff, type Staff } from "@/lib/auth";
-import { clientScope } from "@/lib/crm";
+import { clientScope, newMatchesFor } from "@/lib/crm";
+import { NEW_MATCH_DAYS } from "@/lib/match";
+import { requirementSummary } from "@/components/crm/ClientBadges";
+import { ShareListingActions } from "@/components/crm/MatchActions";
 import { ACTIVITY_TYPES, CLIENT_STATUSES, label } from "@/lib/crm-constants";
 import type { Client, ClientActivityType, Property } from "@/lib/types";
 import { db } from "@/lib/db";
@@ -50,6 +53,7 @@ export default async function DashboardPage() {
   await connection();
   const isAdmin = staff.role === "admin";
   const crm = await loadCrm(staff);
+  const matches = await newMatchesFor(staff, crm.now);
 
   type QueueRow = Pick<Property, "id" | "reference_no" | "title" | "status" | "price" | "listing_type" | "locality" | "submitted_at">;
   const [pending, live, queue] = isAdmin
@@ -142,6 +146,50 @@ export default async function DashboardPage() {
         </div>
 
         <PipelineCard byStatus={crm.byStatus} />
+
+        <section className="card p-6">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="flex items-center gap-2 text-lg font-extrabold tracking-tight">
+              New matches
+              {matches.total > 0 && <span className="rounded-lg bg-[var(--s-seg)] px-2 py-0.5 text-xs font-bold tabular-nums">{matches.total}</span>}
+            </h2>
+            <p className="text-xs text-[var(--s-muted)]">
+              Listings approved in the last {NEW_MATCH_DAYS} days that suit {isAdmin ? "a client" : "your clients"}
+            </p>
+          </div>
+          {matches.rows.length ? (
+            <ul className="divide-y divide-[var(--s-border)]">
+              {matches.rows.map(({ client, listing, preferred }) => (
+                <li key={`${client.id}:${listing.id}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 first:pt-0 last:pb-0">
+                  <div className="min-w-0 flex-1 basis-64">
+                    <p className="truncate text-sm">
+                      <Link href={`/admin/clients/${client.id}`} className="font-bold hover:text-[var(--brand)]">
+                        {client.name}
+                      </Link>
+                      <span className="text-[var(--s-muted)]"> · {requirementSummary(client)}</span>
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-[var(--s-muted)]">
+                      <Link href={`/properties/${listing.reference_no}`} target="_blank" className="font-bold text-[var(--brand)] hover:underline">
+                        {listing.title}
+                      </Link>{" "}
+                      · {formatPrice(listing.price, listing.listing_type)} · {listing.locality}
+                      {isAdmin && ` · ${client.agent_name ?? "Unassigned"}`}
+                    </p>
+                    {preferred && <span className="badge mt-1.5 bg-[var(--s-brand-soft)] text-[var(--brand)]">Preferred area</span>}
+                  </div>
+                  <ShareListingActions client={client} listing={listing} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Empty>No new matches. They appear here when a newly approved listing fits a client&apos;s requirements.</Empty>
+          )}
+          {matches.total > matches.rows.length && (
+            <p className="mt-4 text-xs text-[var(--s-muted)]">
+              Showing {matches.rows.length} of {matches.total}. Mark matches as shared to see the rest.
+            </p>
+          )}
+        </section>
 
         {isAdmin && (
           <section className="card p-6">

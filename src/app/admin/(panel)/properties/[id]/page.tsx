@@ -4,7 +4,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { configValue, db } from "@/lib/db";
-import { staffOptions } from "@/lib/crm";
+import { matchingClientsFor, staffOptions } from "@/lib/crm";
+import { requirementSummary } from "@/components/crm/ClientBadges";
+import { ShareListingActions } from "@/components/crm/MatchActions";
 import { fromNow, istInputValue } from "@/lib/time";
 import { scanText } from "@/lib/scan";
 import { originalUrl } from "@/lib/images";
@@ -54,6 +56,9 @@ const COMPARE_FIELDS: (keyof Property)[] = [
   "amenities",
 ];
 
+/** Matching clients listed on the page; the count shows the rest. */
+const MATCH_LIMIT = 10;
+
 const show = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : Array.isArray(v) ? v.join(", ") || "—" : String(v));
 
 export default async function PropertyAdminPage({ params, searchParams }: PageProps<"/admin/properties/[id]">) {
@@ -67,7 +72,7 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
   type VisitRow = Pick<SiteVerification, "id" | "status" | "result" | "scheduled_at" | "assigned_to" | "visited_at" | "notes"> & {
     assignee_name: string | null;
   };
-  const [owner, images, builders, projects, activity, requests, visits, verifier, staff, requireVerification] = await Promise.all([
+  const [owner, images, builders, projects, activity, requests, visits, verifier, staff, requireVerification, matchingClients] = await Promise.all([
     db.one<Profile>("SELECT id, role, name, phone, wa_opt_out, created_at FROM users WHERE id = ?", [p.owner_id]),
     db.all<PropertyImage>("SELECT * FROM property_images WHERE property_id = ? ORDER BY sort_order, created_at", [id]),
     db.all<Builder>("SELECT * FROM builders ORDER BY name"),
@@ -89,6 +94,8 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
     p.verified_by ? db.one<{ name: string | null }>("SELECT name FROM users WHERE id = ?", [p.verified_by]) : Promise.resolve(null),
     staffOptions(),
     configValue("require_site_verification"),
+    // Who to tell about it: for listings in review or live.
+    ["pending", "under_review", "approved"].includes(p.status) ? matchingClientsFor(p) : Promise.resolve([]),
   ]);
   const openVisit = visits.find((v) => v.status === "scheduled") ?? null;
   const pastVisits = visits.filter((v) => v.status !== "scheduled");
@@ -327,6 +334,42 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
 
           {inReview && (
             <DecisionPanel id={p.id} canReject={p.status !== "rejected"} needsVerification={verificationRequired && !p.verified_at} />
+          )}
+
+          {matchingClients.length > 0 && (
+            <section className="card p-6 text-sm">
+              <h2 className="flex items-center gap-2 text-xl font-extrabold tracking-tight">
+                Matching clients
+                <span className="rounded-lg bg-[var(--s-seg)] px-2 py-0.5 text-xs font-bold">{matchingClients.length}</span>
+              </h2>
+              <p className="mt-1 mb-4 text-xs text-[var(--s-muted)]">
+                {p.status === "approved" ? "Clients whose requirements this listing fits." : "Clients this listing would suit once it is live."}
+              </p>
+              <ul className="divide-y divide-[var(--s-border)]">
+                {matchingClients.slice(0, MATCH_LIMIT).map((c) => (
+                  <li key={c.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
+                    <div>
+                      <p className="flex flex-wrap items-center gap-1.5">
+                        <Link href={`/admin/clients/${c.id}`} className="font-bold hover:text-[var(--brand)]">
+                          {c.name}
+                        </Link>
+                        {c.preferred && <span className="badge bg-[var(--s-brand-soft)] text-[var(--brand)]">Preferred area</span>}
+                        {c.contacted && <span className="badge bg-[var(--s-seg)] text-[var(--s-text-2)]">Already told</span>}
+                      </p>
+                      <p className="text-xs text-[var(--s-muted)]">
+                        {requirementSummary(c)} · {c.agent_name ?? "Unassigned"}
+                      </p>
+                    </div>
+                    {p.status === "approved" && !c.contacted && <ShareListingActions client={c} listing={p} />}
+                  </li>
+                ))}
+              </ul>
+              {matchingClients.length > MATCH_LIMIT && (
+                <p className="mt-3 text-xs text-[var(--s-muted)]">
+                  Showing {MATCH_LIMIT} of {matchingClients.length}.
+                </p>
+              )}
+            </section>
           )}
 
           {isLive && (

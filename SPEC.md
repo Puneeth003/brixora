@@ -129,6 +129,7 @@ Optional: periodic "your listing is receiving interest" message, no details.
 - Follow-ups are entered and shown in IST; client page lists live listings matching the requirements
 - **Website enquiries → CRM** (`recordEnquiryInCrm`): find the client by phone or create one (source `website`), link the enquiry, add it to the timeline; a won/lost client who enquires again is reopened as `new`. Failure never blocks the enquiry.
 - **Inbox** – enquiry conversations. Staff replies are stored in `enquiry_messages` and trigger the `enquiry_reply` WhatsApp template; the visitor reads and answers in `/account/enquiries`.
+- **Match alerts** (`src/lib/match.ts`, `newMatchesFor` / `matchingClientsFor` in `src/lib/crm.ts`) – the reverse of "matching listings": the dashboard's **New matches** pairs listings approved in the last 14 days with the clients they suit (agents: their own clients), and the admin property page lists **Matching clients**. Same rules as the client page; a client with no requirements beyond sale/rent matches nothing, and a client with only preferred localities matches listings in those localities. "Share on WhatsApp" opens a pre-filled chat (staff send it themselves; no template); "Mark as shared" logs a WhatsApp activity with the listing, which also removes the pair from New matches. No extra tables.
 - **Scoping** – admin sees every client and assigns them; an agent sees and edits only clients assigned to them (`clientScope` in `src/lib/crm.ts`), including their enquiry threads.
 
 ## 15. Staff accounts and password reset
