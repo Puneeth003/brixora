@@ -203,7 +203,6 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
                 Call {displayPhone(site.brokerage.phone)}
               </a>
             )}
-            <p className="pt-1 text-center text-xs text-zinc-500">Quote reference {p.reference_no}</p>
           </div>
         </aside>
       </div>
