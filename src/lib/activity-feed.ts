@@ -212,7 +212,11 @@ export function summariseDiff(action: string, diff: unknown, fmt: DiffFormat): s
   if (action === "deleted") return "";
   if (action === "signed_in") return typeof d.ip === "string" && d.ip ? `From ${d.ip}` : "";
   if (action === "whatsapp_connected" || action === "whatsapp_disconnected") return typeof d.number === "string" ? d.number : "";
-  if (action === "invite_sent") return d.delivered === false ? "The invite could not be delivered" : "";
+  if (action === "invite_sent") {
+    // Newer entries carry the full outcome ("Invite sent by email to …. Not sent: …").
+    if (typeof d.result === "string" && d.result) return d.result;
+    return d.delivered === false ? "The invite could not be delivered" : "";
+  }
   if (action === "created" && typeof d.role === "string") return `Role ${d.role}`;
   if (typeof d.price === "number") return `New price ${fmt.price(d.price)}`;
   if (action.endsWith(":sold")) return "Marked as sold";

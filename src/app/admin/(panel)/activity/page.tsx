@@ -120,14 +120,9 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
         description="What the team has been doing across clients and listings."
         count={feed.total}
         actions={
-          <div className="flex items-center gap-2">
-            <a href={`/admin/activity/export${toQueryString(query)}`} className="btn-secondary" title="A formatted Excel report of the entries matching the filters below">
-              Export Excel
-            </a>
-            <a href={`/admin/activity/export${toQueryString({ ...query, format: "csv" })}`} className="btn-ghost" title="The same entries as plain CSV, for other tools">
-              CSV
-            </a>
-          </div>
+          <a href={`/admin/activity/export${toQueryString(query)}`} className="btn-secondary" title="A formatted Excel report of the entries matching the filters below">
+            Export Excel
+          </a>
         }
       />
 

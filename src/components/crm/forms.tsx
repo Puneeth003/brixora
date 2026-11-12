@@ -2,7 +2,7 @@
 
 import { PasswordInput } from "@/components/admin/PasswordInput";
 import { useActionState, useState } from "react";
-import { addClientActivity, changeClientStatus, changeOwnPassword, replyToEnquiry, saveAgent, saveClient } from "@/app/admin/crm-actions";
+import { addClientActivity, changeClientStatus, changeOwnPassword, replyToEnquiry, saveAgent, saveClient, sendAgentWelcome } from "@/app/admin/crm-actions";
 import { ACTIVITY_TYPES, AGENT_TYPES, CLIENT_SOURCES, CLIENT_STATUSES, CLIENT_TYPES } from "@/lib/crm-constants";
 import { PROPERTY_TYPES } from "@/lib/constants";
 import type { ActionState, Agent, Client } from "@/lib/types";
@@ -336,6 +336,37 @@ export function AgentForm({ agent, mailReady }: { agent?: Agent; mailReady: bool
         </button>
         <Status state={state} />
       </div>
+    </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sign-in invite
+// ---------------------------------------------------------------------------
+
+const INVITE_TONE = {
+  sent: "bg-[var(--s-brand-soft)] text-[var(--brand)]",
+  partial: "bg-amber-50 text-amber-800",
+  failed: "bg-red-50 text-red-700",
+} as const;
+
+/** Sends the invite and says what happened right under the button, where the click was. */
+export function InviteButton({ userId }: { userId: string }) {
+  const [state, action, pending] = useActionState(sendAgentWelcome, null);
+  return (
+    <form action={action} className="w-full">
+      <input type="hidden" name="id" value={userId} />
+      <button
+        disabled={pending}
+        className="rounded-full bg-[var(--s-brand-soft)] px-4 py-2 text-sm font-bold text-[var(--brand)] transition-colors hover:bg-[var(--s-seg)] disabled:cursor-wait disabled:opacity-60"
+      >
+        {pending ? "Sending…" : state ? "Send invite again" : "Send invite (email + WhatsApp)"}
+      </button>
+      {state && !pending && (
+        <p role={state.status === "sent" ? "status" : "alert"} className={`mt-3 rounded-[14px] px-3.5 py-2.5 text-[13px] leading-snug font-semibold ${INVITE_TONE[state.status]}`}>
+          {state.message}
+        </p>
+      )}
     </form>
   );
 }

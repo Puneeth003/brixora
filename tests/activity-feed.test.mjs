@@ -116,6 +116,7 @@ test("account and settings entries read plainly", () => {
   assert.equal(summariseDiff("created", { name: "Priya", role: "agent" }, fmt), "Role agent");
   assert.equal(summariseDiff("invite_sent", { delivered: false }, fmt), "The invite could not be delivered");
   assert.equal(summariseDiff("invite_sent", { delivered: true }, fmt), "");
+  assert.equal(summariseDiff("invite_sent", { delivered: true, result: "Invite sent by email to a@b.in." }, fmt), "Invite sent by email to a@b.in.");
   assert.equal(summariseDiff("whatsapp_connected", { number: "+91 98000 00000" }, fmt), "+91 98000 00000");
   assert.equal(
     summariseDiff("edited", { role: { from: "agent", to: "admin" }, password: "reset" }, fmt),

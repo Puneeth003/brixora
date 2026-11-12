@@ -6,9 +6,9 @@ import { db } from "@/lib/db";
 import { mailConfigured } from "@/lib/mail";
 import { displayPhone, formatDate } from "@/lib/format";
 import { Empty, PageHeader, Table } from "@/components/admin/ui";
-import { AgentForm } from "@/components/crm/forms";
+import { AgentForm, InviteButton } from "@/components/crm/forms";
 import { PropertyStatusBadge } from "@/components/StatusBadge";
-import { openMemberClient, sendAgentWelcome, setMemberActive, setStaffActive } from "../../../crm-actions";
+import { openMemberClient, setMemberActive, setStaffActive } from "../../../crm-actions";
 import type { Agent, PropertyStatus } from "@/lib/types";
 
 export const metadata: Metadata = { title: "User" };
@@ -278,11 +278,7 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
                       : "Hasn't set a password yet."}
               </p>
               <div className="flex flex-wrap gap-2">
-                {u.email && isActive && (
-                  <form action={sendAgentWelcome.bind(null, u.id)}>
-                    <button className={softBtn}>Send invite (email + WhatsApp)</button>
-                  </form>
-                )}
+                {u.email && isActive && <InviteButton userId={u.id} />}
                 {!isMe && (
                   <form action={setStaffActive.bind(null, u.id, !isActive)}>
                     <button className={isActive ? dangerBtn : softBtn}>{isActive ? "Deactivate (signs them out)" : "Reactivate"}</button>

@@ -366,7 +366,7 @@ export async function saveAgent(_prev: ActionState, formData: FormData): Promise
   }
 
   const message = id ? "Saved." : "User added.";
-  let invite: { ok: boolean; message: string } | null = null;
+  let invite: InviteResult | null = null;
   if (!id && data.email && formData.get("send_welcome") === "on") invite = await sendInvite(userId!);
   if (!id) {
     const q = invite && !invite.ok ? `saved=${encodeURIComponent(message)}&error=${encodeURIComponent(invite.message)}` : `saved=${encodeURIComponent(invite ? `${message} ${invite.message}` : message)}`;
@@ -379,16 +379,26 @@ export async function saveAgent(_prev: ActionState, formData: FormData): Promise
  * Invites a staff member to set their password: an email with the link, and the same
  * link on WhatsApp (to their work phone). Returns a message saying what happened to each.
  */
-async function sendInvite(userId: string): Promise<{ ok: boolean; message: string }> {
+type InviteResult = {
+  /** Every channel that was tried went through. */
+  ok: boolean;
+  /** "sent": all of them. "partial": at least one. "failed": none. */
+  status: "sent" | "partial" | "failed";
+  message: string;
+};
+
+async function sendInvite(userId: string): Promise<InviteResult> {
   const u = await db.one<{ name: string | null; email: string | null; work_phone: string | null }>(
     "SELECT name, email, work_phone FROM users WHERE id = ?",
     [userId],
   );
   // Staff sign in with email + password, so without an email there's nothing to invite to.
-  if (!u?.email) return { ok: false, message: "This user has no email address, so they can't sign in and no invite was sent." };
+  if (!u?.email) return { ok: false, status: "failed", message: "This user has no email address, so they can't sign in and no invite was sent." };
   const link = `${site.url}/admin/forgot-password?email=${encodeURIComponent(u.email)}`;
   const done: string[] = [];
   const failed: string[] = [];
+  /** Channels that were skipped for a known reason; not a failure of this invite. */
+  const skipped: string[] = [];
 
   try {
     const how = await sendMail({ to: u.email, ...welcomeEmail({ name: u.name, email: u.email, link }) });
@@ -404,24 +414,45 @@ async function sendInvite(userId: string): Promise<{ ok: boolean; message: strin
     failed.push(u.work_phone ? "WhatsApp: the phone number isn't a valid Indian mobile" : "WhatsApp: no phone number on file");
   } else {
     const live = await whatsappConnection();
-    const wa = await notify(phone, "staff_invite", [u.name?.split(" ")[0] || "there", link]);
-    if (!wa.ok) failed.push(`WhatsApp to +${phone}: ${wa.error ?? "not sent"} (see Admin → WhatsApp log)`);
-    else if (!live) failed.push("WhatsApp: not set up here, so it was only printed in the dev server terminal");
-    else done.push(`WhatsApp to +${phone}`);
+    if (!live && process.env.NODE_ENV === "production") {
+      // Nothing to send from yet: don't queue a message that can only fail.
+      skipped.push("WhatsApp isn't connected yet (Settings → WhatsApp), so nothing was sent there");
+    } else {
+      const wa = await notify(phone, "staff_invite", [u.name?.split(" ")[0] || "there", link]);
+      if (!wa.ok) failed.push(`WhatsApp to +${phone}: ${wa.error ?? "not sent"} (see Admin → WhatsApp log)`);
+      else if (!live) failed.push("WhatsApp: not set up here, so it was only printed in the dev server terminal");
+      else done.push(`WhatsApp to +${phone}`);
+    }
   }
 
   const sent = done.length ? `Invite sent by ${done.join(" and ")}.` : "";
   const notSent = failed.length ? `Not sent: ${failed.join("; ")}.` : "";
-  return { ok: failed.length === 0, message: [sent, notSent].filter(Boolean).join(" ") };
+  const notes = skipped.length ? `${skipped.join("; ")}.` : "";
+  return {
+    ok: failed.length === 0 && done.length > 0,
+    status: !done.length ? "failed" : failed.length ? "partial" : "sent",
+    message: [sent, notSent, notes].filter(Boolean).join(" "),
+  };
 }
 
-export async function sendAgentWelcome(id: string) {
+export type InviteState = { status: InviteResult["status"]; message: string } | null;
+
+/** Re-sends the sign-in invite. The result is shown next to the button (see InviteButton). */
+export async function sendAgentWelcome(_prev: InviteState, formData: FormData): Promise<InviteState> {
   const admin = await requireAdmin();
-  if (!isUuid(id)) return;
+  const id = String(formData.get("id") ?? "");
+  if (!isUuid(id)) return { status: "failed", message: "User not found." };
   const res = await sendInvite(id);
-  await logActivity({ entityType: "user", entityId: id, action: "invite_sent", actorType: "admin", actorId: admin.userId, diff: { delivered: res.ok } });
+  await logActivity({
+    entityType: "user",
+    entityId: id,
+    action: "invite_sent",
+    actorType: "admin",
+    actorId: admin.userId,
+    diff: { delivered: res.status !== "failed", result: res.message },
+  });
   revalidatePath("/admin", "layout");
-  redirect(`/admin/users/${id}?${res.ok ? "saved" : "error"}=${encodeURIComponent(res.message)}`);
+  return { status: res.status, message: res.message };
 }
 
 export async function setStaffActive(id: string, active: boolean) {

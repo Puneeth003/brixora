@@ -19,14 +19,19 @@ export function formatNumber(n: number) {
   return inr.format(n);
 }
 
+// Dates are always shown in India time. Without an explicit zone they follow the machine
+// rendering them: UTC on the server, the visitor's zone in the browser.
+const DISPLAY_TIME_ZONE = "Asia/Kolkata";
+
 export function formatDate(value: string | null | undefined) {
   if (!value) return "—";
-  return new Date(value).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(value).toLocaleDateString("en-IN", { timeZone: DISPLAY_TIME_ZONE, day: "numeric", month: "short", year: "numeric" });
 }
 
 export function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
   return new Date(value).toLocaleString("en-IN", {
+    timeZone: DISPLAY_TIME_ZONE,
     day: "numeric",
     month: "short",
     hour: "numeric",
