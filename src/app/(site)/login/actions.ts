@@ -4,7 +4,7 @@ import { getOwner, recordAttempt, startSession, tooManyAttempts } from "@/lib/au
 import { db, dbConfigured, transaction, uuid } from "@/lib/db";
 import { hmac, randomDigits, safeEqual } from "@/lib/crypto";
 import { normalizeIndianPhone } from "@/lib/format";
-import { recentOtpCount, sendOtp } from "@/lib/whatsapp";
+import { recentOtpCount, sendOtp, whatsappConnection } from "@/lib/whatsapp";
 
 // Owner sign-in: phone → 6-digit code on WhatsApp → session cookie.
 
@@ -24,6 +24,10 @@ export async function sendLoginCode(rawPhone: string): Promise<Result> {
   if (!dbConfigured) return { ok: false, error: "Sign-in isn't configured yet." };
   const phone = normalizeIndianPhone(rawPhone);
   if (!phone) return { ok: false, error: "Enter a valid 10-digit Indian mobile number." };
+  // Outside production a missing connection is fine: the code is printed to the server console.
+  if (process.env.NODE_ENV === "production" && !(await whatsappConnection())) {
+    return { ok: false, error: "WhatsApp sign-in isn't set up yet. Please contact us to get access." };
+  }
 
   if ((await recentOtpCount(phone)) >= OTP_PER_HOUR || (await tooManyAttempts("otp_send", phone, OTP_PER_HOUR * 2, 60, { countSuccess: true }))) {
     return { ok: false, error: "Too many codes requested. Please try again in an hour." };

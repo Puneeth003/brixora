@@ -51,6 +51,29 @@ export type WhatsAppConnection = {
 };
 
 /**
+ * WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID, or null for each one that is empty or
+ * still a placeholder (e.g. "<LATER: from Meta>"). Meta tokens have no spaces or angle
+ * brackets and phone number IDs are all digits.
+ */
+function envCredentials() {
+  const token = (process.env.WHATSAPP_TOKEN ?? "").trim();
+  const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
+  return {
+    token: /^[^\s<>]+$/.test(token) ? token : null,
+    phoneNumberId: /^\d+$/.test(phoneNumberId) ? phoneNumberId : null,
+  };
+}
+
+/** Names of the WhatsApp env variables that are set but can't be real values. */
+export function whatsappEnvProblems() {
+  const valid = envCredentials();
+  const bad: string[] = [];
+  if (process.env.WHATSAPP_TOKEN?.trim() && !valid.token) bad.push("WHATSAPP_TOKEN");
+  if (process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() && !valid.phoneNumberId) bad.push("WHATSAPP_PHONE_NUMBER_ID");
+  return bad;
+}
+
+/**
  * The number messages go out from: the one connected in Settings → WhatsApp (Embedded
  * Signup, coexistence with the WhatsApp Business app) if any, else WHATSAPP_TOKEN /
  * WHATSAPP_PHONE_NUMBER_ID.
@@ -76,8 +99,7 @@ export async function whatsappConnection(): Promise<WhatsAppConnection | null> {
       console.error("[whatsapp] stored token can't be decrypted", e);
     }
   }
-  const token = process.env.WHATSAPP_TOKEN;
-  const envPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const { token, phoneNumberId: envPhoneId } = envCredentials();
   if (!token || !envPhoneId) return null;
   return { token, phoneNumberId: envPhoneId, wabaId: null, displayPhone: null, verifiedName: null, connectedAt: null, source: "env" };
 }

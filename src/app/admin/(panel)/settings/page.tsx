@@ -7,7 +7,7 @@ import { site } from "@/lib/site";
 import { PageHeader } from "@/components/admin/ui";
 import { ChangePasswordForm } from "@/components/crm/forms";
 import { signOutAllStaff } from "@/app/admin/settings-actions";
-import { brokeragePhone, graphVersion, normalizePhone, whatsappConnection } from "@/lib/whatsapp";
+import { brokeragePhone, graphVersion, normalizePhone, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
 import { formatDateTime } from "@/lib/format";
 import { OrganizationForm, ProfileForm, TestEmailForm } from "./SettingsForms";
 import { WhatsAppConnect } from "./WhatsAppConnect";
@@ -178,6 +178,7 @@ async function WhatsAppSection() {
   const conn = await whatsappConnection();
   const appId = process.env.META_APP_ID;
   const configId = process.env.WHATSAPP_ES_CONFIG_ID;
+  const envProblems = whatsappEnvProblems();
   const forwardTo = brokeragePhone();
   const selfForward = Boolean(conn?.displayPhone && forwardTo && normalizePhone(conn.displayPhone) === forwardTo);
   const rows = conn
@@ -207,6 +208,12 @@ async function WhatsAppSection() {
         ) : (
           <p className="mb-5 text-sm text-[var(--s-muted)]">Not connected. Messages are logged but not sent.</p>
         )}
+        {!conn && envProblems.length > 0 && (
+          <p className="mb-5 rounded-xl bg-[var(--s-seg)] p-3 text-sm text-[var(--s-late)]">
+            {envProblems.join(" and ")} {envProblems.length > 1 ? "are" : "is"} set on the server but still {envProblems.length > 1 ? "hold placeholder text" : "holds placeholder text"}, not
+            a real value. Replace {envProblems.length > 1 ? "them" : "it"} with the access token and phone number ID from Meta → WhatsApp → API Setup, then redeploy.
+          </p>
+        )}
         {appId && configId ? (
           <WhatsAppConnect appId={appId} configId={configId} version={graphVersion()} connected={conn?.source === "connected"} />
         ) : (
@@ -235,13 +242,17 @@ async function WhatsAppSection() {
 
 async function SecuritySection({ email }: { email: string }) {
   const sessions = await db.count("SELECT COUNT(*) FROM sessions WHERE kind = 'admin' AND expires_at > UTC_TIMESTAMP(3)");
+  const whatsappOn = Boolean(await whatsappConnection());
+  const envProblems = whatsappEnvProblems();
   return (
     <>
       <Card title="Security" description="Read-only. These are configured through environment variables.">
         <ul className="divide-y divide-[var(--s-border)]">
           <StatusRow label="Two-factor authentication" on={adminMfaRequired} detail="ADMIN_2FA" />
           <StatusRow label="Email" on={mailConfigured} detail={mailConfigured ? `${process.env.SMTP_HOST} · from ${mailFrom || "(no sender set)"}` : "SMTP_HOST"} />
-          <StatusRow label="WhatsApp" on={Boolean(await whatsappConnection())} detail="Settings → WhatsApp, or WHATSAPP_TOKEN" />
+          <StatusRow label="WhatsApp" on={whatsappOn}
+            detail={!whatsappOn && envProblems.length ? `${envProblems.join(", ")}: placeholder text, not a real value` : "Settings → WhatsApp, or WHATSAPP_TOKEN"}
+          />
         </ul>
       </Card>
       <Card title="Outgoing email" description="Password-reset codes, welcome emails and password-changed notices go out over SMTP. Send yourself a test to check delivery.">

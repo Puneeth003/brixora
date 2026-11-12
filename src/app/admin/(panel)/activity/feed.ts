@@ -1,7 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { ACTIVITY_TYPES, label } from "@/lib/crm-constants";
-import { formatPrice } from "@/lib/format";
+import { formatDateTime, formatPrice } from "@/lib/format";
 import type { ClientActivityType } from "@/lib/types";
 
 export type Kind = "all" | "crm" | "listings";
@@ -165,6 +165,15 @@ const LOG_VERBS: Record<string, string> = {
   photo_shown: "unhid a photo on",
   photo_cover_set: "changed the cover photo of",
   retried: "retried",
+  verification_scheduled: "scheduled a site visit for",
+  verification_rescheduled: "rescheduled the site visit for",
+  verification_cancelled: "cancelled the site visit for",
+  verified_on_site: "completed the site visit and verified",
+  verification_issues: "found issues on the site visit for",
+  archived: "archived",
+  restored: "restored",
+  sold: "confirmed the sale of",
+  removed_from_website: "took down",
 };
 
 const CHANGE_LABEL: Record<string, string> = { price: "price change", details: "details change", sold: "sale confirmation" };
@@ -191,6 +200,12 @@ function diffSummary(action: string, diff: unknown): string {
   if (!diff || typeof diff !== "object") return "";
   const d = diff as Record<string, unknown>;
   if (action === "rejected" && typeof d.reason === "string") return d.reason;
+  if (action === "verification_scheduled" || action === "verification_rescheduled") {
+    const when = typeof d.visit_at === "string" ? `Visit on ${formatDateTime(d.visit_at)}` : "";
+    const who = typeof d.assigned_to === "string" && d.assigned_to ? `assigned to ${d.assigned_to}` : "";
+    return [when, who].filter(Boolean).join(" · ");
+  }
+  if (action === "verified_on_site" || action === "verification_issues") return typeof d.notes === "string" ? d.notes : "";
   if (typeof d.price === "number") return `New price ${formatPrice(d.price)}`;
   if (action.endsWith(":sold")) return "Marked as sold";
   if (action === "edited" || action.endsWith(":details")) {
@@ -216,7 +231,8 @@ export function describe(r: FeedRow): Entry {
     return { actor: r.actor_name ?? "Staff", actorKind: "staff", verb, target: client, href, sub: null, excerpt: body, tone: type };
   }
 
-  const actorKind: Entry["actorKind"] = r.actor_type === "system" ? "system" : r.actor_type === "owner" ? "owner" : "staff";
+  // Older rows logged agents' site visits as "system"; a row with an actor is never the system.
+  const actorKind: Entry["actorKind"] = r.actor_type === "owner" ? "owner" : r.actor_type === "system" && !r.actor_id ? "system" : "staff";
   const actor = actorKind === "system" ? "System" : (r.actor_name ?? (actorKind === "owner" ? "Owner" : "Admin"));
   const [base, change] = r.kind.split(":");
   let verb: string;

@@ -139,7 +139,7 @@ export async function completeVerification(_prev: ActionState, formData: FormDat
     entityType: "property",
     entityId: v.property_id,
     action: result === "verified" ? "verified_on_site" : "verification_issues",
-    actorType: staff.role === "admin" ? "admin" : "system",
+    actorType: "admin", // "admin" covers all staff; the actor's own role comes from actorId
     actorId: staff.userId,
     diff: { visit_id: v.id, notes, location: lat !== null ? `${lat},${lng}` : null },
   });
