@@ -126,7 +126,8 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
         }
       />
 
-      <form className="card mb-6 flex flex-wrap items-end gap-3 p-4">
+      {/* Keyed on the filters: the fields are uncontrolled, so a link that changes the filters must remount them. */}
+      <form key={toQueryString(query)} className="card mb-6 flex flex-wrap items-end gap-3 p-4">
         <label className="min-w-[200px] flex-[2]">
           <span className="label">Search</span>
           <input name="q" type="search" defaultValue={filters.q} maxLength={80} placeholder="Client name or listing reference" className="input" />
