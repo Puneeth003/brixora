@@ -7,6 +7,7 @@ import { formatDate, formatNumber, formatPrice, displayPhone } from "@/lib/forma
 import { furnishingLabel, propertyTypeLabel } from "@/lib/constants";
 import { propertyUrl, publicImageUrl, site, whatsappLink } from "@/lib/site";
 import { Gallery } from "@/components/public/Gallery";
+import { EmiCalculator } from "@/components/public/EmiCalculator";
 import { EnquiryForm } from "@/components/public/EnquiryForm";
 import { SaveButton } from "@/components/account/AccountForms";
 import { ShieldIcon } from "@/components/icons";
@@ -165,6 +166,8 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
               </dl>
             </section>
           )}
+
+          {p.listing_type === "sale" && p.price > 0 && <EmiCalculator price={p.price} />}
 
           <p className="text-xs text-zinc-500">
             Location shown at locality level to protect owner privacy. Exact address shared by our team on request.
