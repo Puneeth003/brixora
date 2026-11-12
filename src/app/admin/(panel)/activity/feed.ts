@@ -1,10 +1,9 @@
 import "server-only";
-import { db } from "@/lib/db";
+import { db, likeEscape } from "@/lib/db";
+import { ACTION_FILTERS, BURST_VERBS, summariseDiff, type DiffFormat, type Kind } from "@/lib/activity-feed";
 import { ACTIVITY_TYPES, label } from "@/lib/crm-constants";
-import { formatDateTime, formatPrice } from "@/lib/format";
+import { formatPrice } from "@/lib/format";
 import type { ClientActivityType } from "@/lib/types";
-
-export type Kind = "all" | "crm" | "listings";
 
 export type FeedRow = {
   src: "crm" | "log";
@@ -33,11 +32,44 @@ export const WON_LIKE = "%→ Won";
  * The merged feed as one UNION ALL query with a common column set. Both halves take
  * the same optional filters so counts and pages agree.
  */
-export function feedQuery(opts: { kind: Kind; person?: string; since?: string; staffOnly?: boolean }) {
+export type FeedOpts = {
+  kind: Kind;
+  person?: string;
+  /** Inclusive lower bound (ISO). */
+  since?: string;
+  /** Exclusive upper bound (ISO). */
+  until?: string;
+  staffOnly?: boolean;
+  /** An ACTION_FILTERS value. */
+  action?: string;
+  /** Matches a client's name or note, or a listing's reference, title, builder or project. */
+  q?: string;
+};
+
+export function feedQuery(opts: FeedOpts) {
   const crmWhere: string[] = [];
   const logWhere: string[] = ["al.action <> 'enquiry_received'"]; // already in the CRM feed as a website enquiry
   const crmParams: unknown[] = [];
   const logParams: unknown[] = [];
+  const actionFilter = ACTION_FILTERS.find((a) => a.value === opts.action);
+  if (actionFilter) {
+    // "1 = 0": this half of the feed has no entries of that type.
+    crmWhere.push(actionFilter.crm ?? "1 = 0");
+    logWhere.push(actionFilter.log ?? "1 = 0");
+  }
+  if (opts.q) {
+    const term = `%${likeEscape(opts.q)}%`;
+    crmWhere.push("(c.name LIKE ? OR ca.body LIKE ?)");
+    crmParams.push(term, term);
+    logWhere.push("(p.reference_no LIKE ? OR p.title LIKE ? OR b.name LIKE ? OR pj.name LIKE ?)");
+    logParams.push(term, term, term, term);
+  }
+  if (opts.until) {
+    crmWhere.push("ca.created_at < ?");
+    crmParams.push(opts.until);
+    logWhere.push("al.created_at < ?");
+    logParams.push(opts.until);
+  }
   if (opts.person) {
     crmWhere.push("ca.actor_id = ?");
     crmParams.push(opts.person);
@@ -78,16 +110,17 @@ export function feedQuery(opts: { kind: Kind; person?: string; since?: string; s
   return { sql: `${crm}\nUNION ALL\n${log}`, params: [...crmParams, ...logParams] };
 }
 
-export async function feedPage(opts: { kind: Kind; person?: string }, limit: number, offset: number) {
+export function feedRows(opts: FeedOpts, limit: number, offset = 0) {
   const q = feedQuery(opts);
-  const [rows, total] = await Promise.all([
-    db.all<FeedRow>(`SELECT * FROM (${q.sql}) f ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, [...q.params, limit, offset]),
-    db.count(`SELECT COUNT(*) FROM (${q.sql}) f`, q.params),
-  ]);
+  return db.all<FeedRow>(`SELECT * FROM (${q.sql}) f ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, [...q.params, limit, offset]);
+}
+
+export async function feedPage(opts: FeedOpts, limit: number, offset: number) {
+  const [rows, total] = await Promise.all([feedRows(opts, limit, offset), countFeed(opts)]);
   return { rows, total };
 }
 
-export function countFeed(opts: { kind: Kind; since: string; staffOnly?: boolean }) {
+export function countFeed(opts: FeedOpts) {
   const q = feedQuery(opts);
   return db.count(`SELECT COUNT(*) FROM (${q.sql}) f`, q.params);
 }
@@ -116,9 +149,51 @@ export function topPerformers(since: string) {
       GROUP BY u.id, u.name, u.email
      HAVING touches > 0 OR won > 0
       ORDER BY touches DESC, won DESC, u.name
-      LIMIT 5`,
+      LIMIT 10`,
     [CONTACT_TYPES, WON_LIKE, since],
   );
+}
+
+export type AgentStats = {
+  /** Client contacts logged since `since`, by type (call, meeting, …). */
+  byType: Record<string, number>;
+  contacts: number;
+  won: number;
+  /** Clients assigned to them that are still open (not won or lost), right now. */
+  openClients: number;
+  listingActions: number;
+  lastActiveAt: string | null;
+};
+
+/** One staff member's figures for the performance panel. */
+export async function agentStats(userId: string, since: string): Promise<AgentStats> {
+  const [types, won, openClients, listingActions, last] = await Promise.all([
+    db.all<{ type: string; n: number }>("SELECT type, COUNT(*) AS n FROM client_activities WHERE actor_id = ? AND created_at >= ? GROUP BY type", [userId, since]),
+    db.count("SELECT COUNT(DISTINCT client_id) FROM client_activities WHERE actor_id = ? AND type = 'status' AND body LIKE ? AND created_at >= ?", [
+      userId,
+      WON_LIKE,
+      since,
+    ]),
+    db.count("SELECT COUNT(*) FROM clients WHERE assigned_to = ? AND status NOT IN ('won', 'lost')", [userId]),
+    db.count("SELECT COUNT(*) FROM activity_log WHERE actor_id = ? AND created_at >= ?", [userId, since]),
+    db.one<{ at: string | null }>(
+      `SELECT MAX(x.created_at) AS at FROM (
+         SELECT created_at FROM client_activities WHERE actor_id = ?
+         UNION ALL
+         SELECT created_at FROM activity_log WHERE actor_id = ?
+       ) x`,
+      [userId, userId],
+    ),
+  ]);
+  const byType = Object.fromEntries(types.map((t) => [t.type, Number(t.n) || 0]));
+  return {
+    byType,
+    contacts: CONTACT_TYPES.reduce((sum, t) => sum + (byType[t] ?? 0), 0),
+    won,
+    openClients,
+    listingActions,
+    lastActiveAt: last?.at ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +234,7 @@ const LOG_VERBS: Record<string, string> = {
   unfeatured: "unfeatured",
   expiry_extended: "extended the expiry of",
   expired: "expired",
-  photo_uploaded: "uploaded photos to",
+  photo_uploaded: "uploaded a photo to",
   photo_deleted: "deleted a photo from",
   photo_hidden: "hid a photo on",
   photo_shown: "unhid a photo on",
@@ -196,31 +271,30 @@ function isStaff(role: FeedRow["actor_role"]) {
   return role === "admin" || role === "agent";
 }
 
-function diffSummary(action: string, diff: unknown): string {
-  if (!diff || typeof diff !== "object") return "";
-  const d = diff as Record<string, unknown>;
-  if (action === "rejected" && typeof d.reason === "string") return d.reason;
-  if (action === "verification_scheduled" || action === "verification_rescheduled") {
-    const when = typeof d.visit_at === "string" ? `Visit on ${formatDateTime(d.visit_at)}` : "";
-    const who = typeof d.assigned_to === "string" && d.assigned_to ? `assigned to ${d.assigned_to}` : "";
-    return [when, who].filter(Boolean).join(" · ");
-  }
-  if (action === "verified_on_site" || action === "verification_issues") return typeof d.notes === "string" ? d.notes : "";
-  if (typeof d.price === "number") return `New price ${formatPrice(d.price)}`;
-  if (action.endsWith(":sold")) return "Marked as sold";
-  if (action === "edited" || action.endsWith(":details")) {
-    const keys = Object.keys(d).slice(0, 6).map((k) => k.replace(/_/g, " "));
-    return keys.length ? `Changed ${keys.join(", ")}` : "";
-  }
-  return "";
+const IST = "Asia/Kolkata";
+
+/** "27 Oct, 12:10 pm" in India time, whatever the server's timezone. */
+export function istDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-IN", { timeZone: IST, day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
-export function describe(r: FeedRow): Entry {
+const DIFF_FORMAT: DiffFormat = {
+  price: (n) => formatPrice(n),
+  date: (iso) => new Date(iso).toLocaleDateString("en-IN", { timeZone: IST, day: "numeric", month: "short", year: "numeric" }),
+  dateTime: istDateTime,
+};
+
+/**
+ * A feed row as a sentence. `count` is how many identical photo actions the row stands
+ * for (see groupBursts); `fullText` keeps the detail line unshortened (CSV export).
+ */
+export function describe(r: FeedRow, count = 1, fullText = false): Entry {
+  const clip = (s: string | null | undefined, max = 140) => (fullText ? (s ?? "").replace(/\s+/g, " ").trim() : excerpt(s, max));
   if (r.src === "crm") {
     const type = r.kind as ClientActivityType;
     const client = r.target_name ?? "a client";
     const href = `/admin/clients/${r.target_id}`;
-    const body = excerpt(r.body);
+    const body = clip(r.body);
     if (type === "enquiry" || !r.actor_id) {
       return { actor: client, actorKind: "client", verb: "sent a website enquiry", target: "", href, sub: null, excerpt: body, tone: "enquiry" };
     }
@@ -239,6 +313,7 @@ export function describe(r: FeedRow): Entry {
   if (change && base === "change_requested") verb = `requested a ${CHANGE_LABEL[change] ?? "change"} on`;
   else if (change && base === "change_approved") verb = `approved the ${CHANGE_LABEL[change] ?? "change"} on`;
   else if (change && base === "change_rejected") verb = `rejected the ${CHANGE_LABEL[change] ?? "change"} on`;
+  else if (count > 1 && BURST_VERBS[r.kind]) verb = BURST_VERBS[r.kind](count);
   else verb = LOG_VERBS[r.kind] ?? r.kind.replace(/[_:]/g, " ");
 
   const entity = r.target_type;
@@ -266,7 +341,7 @@ export function describe(r: FeedRow): Entry {
     target,
     href,
     sub: entity === "property" ? r.target_sub : null,
-    excerpt: showDiff ? excerpt(diffSummary(r.kind, r.diff)) : "",
+    excerpt: showDiff ? clip(summariseDiff(r.kind, r.diff, DIFF_FORMAT), 220) : "",
     tone,
   };
 }
