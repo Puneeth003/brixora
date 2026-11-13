@@ -8,6 +8,7 @@ import { brokeragePhone, notify } from "@/lib/whatsapp";
 import { displayPhone, normalizeIndianPhone } from "@/lib/format";
 import { propertyUrl } from "@/lib/site";
 import { logActivity } from "@/lib/activity";
+import { parseVisitRequest, withVisitRequest } from "@/lib/visit-request";
 import type { ActionState } from "@/lib/types";
 
 const schema = z.object({
@@ -32,6 +33,12 @@ export async function submitEnquiry(_prev: ActionState, formData: FormData): Pro
   const phone = normalizeIndianPhone(parsed.data.phone);
   if (!phone) return { ok: false, error: "Please enter a valid 10-digit Indian mobile number." };
 
+  // Optional: a preferred time to see the property. Saved with the enquiry text.
+  const visitCheck = parseVisitRequest(String(formData.get("visit_date") ?? "").trim(), String(formData.get("visit_time") ?? "").trim(), Date.now());
+  if (!visitCheck.ok) return { ok: false, error: visitCheck.error };
+  const visit = visitCheck.visit;
+  const message = withVisitRequest(parsed.data.message, visit);
+
   // Spam guard: a few enquiries per number per hour (wider budget per IP).
   if (await tooManyAttempts("enquiry", phone, 5, 60, { countSuccess: true })) {
     return { ok: false, error: "You've sent several enquiries already. We'll call you shortly, or please call us directly." };
@@ -55,7 +62,7 @@ export async function submitEnquiry(_prev: ActionState, formData: FormData): Pro
       property_id: property.id,
       name: parsed.data.name,
       phone,
-      message: parsed.data.message ?? null,
+      message,
     });
   } catch (error) {
     console.error("[enquiry] insert failed", error);
@@ -66,9 +73,10 @@ export async function submitEnquiry(_prev: ActionState, formData: FormData): Pro
     enquiryId: enquiry.id,
     name: parsed.data.name,
     phone,
-    message: parsed.data.message ?? null,
+    message,
     propertyId: property.id,
     listingType: property.listing_type,
+    visitAt: visit?.at ?? null,
   });
 
   const to = brokeragePhone();
@@ -79,7 +87,7 @@ export async function submitEnquiry(_prev: ActionState, formData: FormData): Pro
       property.reference_no,
       parsed.data.name,
       displayPhone(phone),
-      (parsed.data.message || "-").replace(/\s+/g, " ").slice(0, 900),
+      (message || "-").replace(/\s+/g, " ").slice(0, 900),
       propertyUrl(property.reference_no),
     ],
     enquiry.id,
@@ -97,10 +105,8 @@ export async function submitEnquiry(_prev: ActionState, formData: FormData): Pro
     diff: { enquiry_id: enquiry.id },
   });
 
-  return {
-    ok: true,
-    message: member
-      ? "Thanks! Our team will call you shortly. You can follow this enquiry under My account."
-      : "Thanks! Our team will call you shortly.",
-  };
+  const thanks = visit
+    ? `Thanks! We've noted your visit request for ${visit.label}. Our team will call you to confirm.`
+    : "Thanks! Our team will call you shortly.";
+  return { ok: true, message: member ? `${thanks} You can follow this enquiry under My account.` : thanks };
 }

@@ -45,6 +45,8 @@ export async function recordEnquiryInCrm(e: {
   message: string | null;
   propertyId: string;
   listingType: ListingType;
+  /** When the visitor asked to see the property, if they did. */
+  visitAt?: Date | null;
 }) {
   try {
     const existing = await db.one<{ id: string; status: string; property_id: string | null }>(
@@ -77,6 +79,10 @@ export async function recordEnquiryInCrm(e: {
         "id = ?",
         [existing.id],
       );
+    }
+    if (e.visitAt) {
+      // Put the requested visit on the follow-up calendar, unless something earlier is already planned.
+      await db.run("UPDATE clients SET next_follow_up = ? WHERE id = ? AND (next_follow_up IS NULL OR next_follow_up > ?)", [e.visitAt, clientId, e.visitAt]);
     }
     await db.update("enquiries", { client_id: clientId }, "id = ?", [e.enquiryId]);
     await logClientActivity({ clientId: clientId!, type: "enquiry", body: e.message, propertyId: e.propertyId });

@@ -1,10 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { submitEnquiry } from "@/app/(site)/properties/[ref]/actions";
+import { VISIT_SLOTS } from "@/lib/visit-request";
 
-export function EnquiryForm({ refNo }: { refNo: string }) {
+/** `visitDates`: the first and last day a visit can be asked for, worked out on the server. */
+export function EnquiryForm({ refNo, visitDates }: { refNo: string; visitDates: { min: string; max: string } }) {
   const [state, action, pending] = useActionState(submitEnquiry, null);
+  const [wantVisit, setWantVisit] = useState(false);
 
   if (state?.ok) {
     return (
@@ -45,6 +48,40 @@ export function EnquiryForm({ refNo }: { refNo: string }) {
           />
         </div>
       </div>
+
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50/60 p-3">
+        <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-zinc-800">
+          <input type="checkbox" checked={wantVisit} onChange={(e) => setWantVisit(e.target.checked)} className="size-4 accent-brand-600" />
+          I&apos;d like to visit this property
+        </label>
+        {wantVisit && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div>
+              <label className="label" htmlFor="eq-visit-date">
+                Preferred date
+              </label>
+              <input id="eq-visit-date" name="visit_date" type="date" required min={visitDates.min} max={visitDates.max} className="input" />
+            </div>
+            <div>
+              <label className="label" htmlFor="eq-visit-time">
+                Time
+              </label>
+              <select id="eq-visit-time" name="visit_time" required defaultValue="" className="input">
+                <option value="" disabled>
+                  Choose
+                </option>
+                {VISIT_SLOTS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="col-span-2 text-xs text-zinc-500">This is a request. Our team will call to confirm the time.</p>
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="label" htmlFor="eq-message">
           Message <span className="font-normal text-zinc-400">(optional)</span>
@@ -60,7 +97,7 @@ export function EnquiryForm({ refNo }: { refNo: string }) {
       </div>
       {state?.error && <p className="text-sm text-red-600">{state.error}</p>}
       <button className="btn-primary w-full" disabled={pending}>
-        {pending ? "Sending…" : "Request a call back"}
+        {pending ? "Sending…" : wantVisit ? "Request a visit" : "Request a call back"}
       </button>
       <p className="text-xs text-zinc-500">Your details go only to our team, never to the owner.</p>
     </form>

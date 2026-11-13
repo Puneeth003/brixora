@@ -5,6 +5,7 @@ import { PAGE_SIZE, PROPERTY_TYPES } from "./constants";
 import { sampleImages, sampleProperties } from "./samples";
 import { byPricePerSqft, isNewOnSite } from "./listing-facts";
 import { PRICE_BAND_WIDE, rankSimilar } from "./similar";
+import { visitDateRange } from "./visit-request";
 import type { PublicProperty } from "./types";
 
 // Public reads go through the public_* views only (safe columns of live listings), and
@@ -226,7 +227,7 @@ export async function getPublicProperty(ref: string) {
 
   if (!dbConfigured) {
     const property = sampleProperties.find((p) => p.reference_no === ref);
-    return property ? { property, images: sampleImages[property.id] ?? [], isNew: isNewOnSite(property.approved_at, Date.now()) } : null;
+    return property ? { property, images: sampleImages[property.id] ?? [], ...clockFacts(property.approved_at) } : null;
   }
 
   const property = await db.one<PublicProperty>("SELECT * FROM public_properties WHERE reference_no = ?", [ref]);
@@ -235,7 +236,17 @@ export async function getPublicProperty(ref: string) {
     "SELECT id, watermarked_path, sort_order, is_cover FROM public_images WHERE property_id = ? ORDER BY is_cover DESC, sort_order",
     [property.id],
   );
-  return { property, images, isNew: isNewOnSite(property.approved_at, Date.now()) };
+  return { property, images, ...clockFacts(property.approved_at) };
+}
+
+/**
+ * Facts that depend on today's date. Worked out here, inside the cached query, because a
+ * page render may not read the clock; they are at most a few minutes old, and the
+ * enquiry action re-checks the visit date against the real time.
+ */
+function clockFacts(approvedAt: string | null) {
+  const now = Date.now();
+  return { isNew: isNewOnSite(approvedAt, now), visitDates: visitDateRange(now) };
 }
 
 /** Up to `limit` live listings most like this one (see similar.ts for the rule). */

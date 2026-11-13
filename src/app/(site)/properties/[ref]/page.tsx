@@ -44,7 +44,7 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
   const { ref } = await params;
   const data = await getPublicProperty(ref);
   if (!data) notFound();
-  const { property: p, images, isNew } = data;
+  const { property: p, images, isNew, visitDates } = data;
   const perSqft = pricePerSqft(p);
   const share = shareLinks({ title: p.title, priceText: formatPrice(p.price, p.listing_type), locality: `${p.locality}, ${p.city}`, url: propertyUrl(p.reference_no) });
 
@@ -191,7 +191,7 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
             <p className="mb-4 text-sm text-zinc-500">
               {site.name} handles this listing. Leave your number and we&apos;ll call you.
             </p>
-            <EnquiryForm refNo={p.reference_no} />
+            <EnquiryForm refNo={p.reference_no} visitDates={visitDates} />
           </div>
           <SaveButton propertyId={p.id} refNo={p.reference_no} />
           {p.verified_at && (
