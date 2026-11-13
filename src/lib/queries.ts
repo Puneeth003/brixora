@@ -3,6 +3,8 @@ import { cacheLife, cacheTag } from "next/cache";
 import { db, dbConfigured, likeEscape } from "./db";
 import { PAGE_SIZE, PROPERTY_TYPES } from "./constants";
 import { sampleImages, sampleProperties } from "./samples";
+import { byPricePerSqft, isNewOnSite } from "./listing-facts";
+import { PRICE_BAND_WIDE, rankSimilar } from "./similar";
 import type { PublicProperty } from "./types";
 
 // Public reads go through the public_* views only (safe columns of live listings), and
@@ -43,7 +45,16 @@ export type ListingCard = Pick<
   | "approved_at"
   | "cover_path"
   | "verified_at"
->;
+> & {
+  /** Went live within the last NEW_LISTING_DAYS. Set by the cached queries below. */
+  is_new?: boolean;
+};
+
+/** Adds the "New" flag. Called inside the cached queries, so the clock is read there and not during a render. */
+function markNew<T extends { approved_at: string | null }>(rows: T[]): (T & { is_new: boolean })[] {
+  const now = Date.now();
+  return rows.map((row) => ({ ...row, is_new: isNewOnSite(row.approved_at, now) }));
+}
 
 const VALID_TYPES = new Set(PROPERTY_TYPES.map((t) => t.value as string));
 
@@ -76,11 +87,12 @@ function demoListings(f: ListingFilters, page: number) {
   );
   if (f.sort === "price_asc") rows = [...rows].sort((a, b) => a.price - b.price);
   else if (f.sort === "price_desc") rows = [...rows].sort((a, b) => b.price - a.price);
+  else if (f.sort === "sqft_asc") rows = byPricePerSqft(rows);
   else rows = [...rows].sort((a, b) => Number(b.featured) - Number(a.featured) || b.approved_at!.localeCompare(a.approved_at!));
 
   const total = rows.length;
   const from = (page - 1) * PAGE_SIZE;
-  return { items: rows.slice(from, from + PAGE_SIZE) as ListingCard[], total, page, pages: Math.ceil(total / PAGE_SIZE) };
+  return { items: markNew(rows.slice(from, from + PAGE_SIZE) as ListingCard[]), total, page, pages: Math.ceil(total / PAGE_SIZE) };
 }
 
 export async function getPublicListings(f: ListingFilters) {
@@ -136,7 +148,14 @@ export async function getPublicListings(f: ListingFilters) {
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const order =
-    f.sort === "price_asc" ? "price ASC" : f.sort === "price_desc" ? "price DESC" : "featured DESC, approved_at DESC";
+    f.sort === "price_asc"
+      ? "price ASC"
+      : f.sort === "price_desc"
+        ? "price DESC"
+        : f.sort === "sqft_asc"
+          ? // Lowest price per sq.ft first; listings without an area go last.
+            "(area_sqft IS NULL OR area_sqft <= 0), price / area_sqft ASC, approved_at DESC"
+          : "featured DESC, approved_at DESC";
   const from = (page - 1) * PAGE_SIZE;
 
   try {
@@ -148,7 +167,7 @@ export async function getPublicListings(f: ListingFilters) {
       ]),
       db.count(`SELECT COUNT(*) FROM public_properties ${whereSql}`, values),
     ]);
-    return { items, total, page, pages: Math.ceil(total / PAGE_SIZE) };
+    return { items: markNew(items), total, page, pages: Math.ceil(total / PAGE_SIZE) };
   } catch (error) {
     console.error("[queries] listings", error);
     return { items: [] as ListingCard[], total: 0, page, pages: 0 };
@@ -162,7 +181,7 @@ export async function getFeaturedListings(limit = 6) {
 
   if (!dbConfigured) return demoListings({}, 1).items.slice(0, limit);
 
-  return db.all<ListingCard>(`SELECT ${LIST_COLUMNS} FROM public_properties ORDER BY featured DESC, approved_at DESC LIMIT ?`, [limit]);
+  return markNew(await db.all<ListingCard>(`SELECT ${LIST_COLUMNS} FROM public_properties ORDER BY featured DESC, approved_at DESC LIMIT ?`, [limit]));
 }
 
 export async function getLocalities() {
@@ -207,7 +226,7 @@ export async function getPublicProperty(ref: string) {
 
   if (!dbConfigured) {
     const property = sampleProperties.find((p) => p.reference_no === ref);
-    return property ? { property, images: sampleImages[property.id] ?? [] } : null;
+    return property ? { property, images: sampleImages[property.id] ?? [], isNew: isNewOnSite(property.approved_at, Date.now()) } : null;
   }
 
   const property = await db.one<PublicProperty>("SELECT * FROM public_properties WHERE reference_no = ?", [ref]);
@@ -216,7 +235,40 @@ export async function getPublicProperty(ref: string) {
     "SELECT id, watermarked_path, sort_order, is_cover FROM public_images WHERE property_id = ? ORDER BY is_cover DESC, sort_order",
     [property.id],
   );
-  return { property, images };
+  return { property, images, isNew: isNewOnSite(property.approved_at, Date.now()) };
+}
+
+/** Up to `limit` live listings most like this one (see similar.ts for the rule). */
+export async function getSimilarListings(
+  target: { id: string; listing_type: string; property_type: string; locality: string; price: number; bedrooms: number | null },
+  limit = 3,
+) {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("listings");
+
+  if (!dbConfigured) return markNew(rankSimilar(target, sampleProperties as ListingCard[], limit));
+
+  try {
+    // Anything that could score: same locality, same type, or roughly the same price.
+    const candidates = await db.all<ListingCard>(
+      `SELECT ${LIST_COLUMNS} FROM public_properties
+        WHERE listing_type = ? AND id <> ? AND (locality = ? OR property_type = ? OR price BETWEEN ? AND ?)
+        ORDER BY featured DESC, approved_at DESC LIMIT 200`,
+      [
+        target.listing_type,
+        target.id,
+        target.locality,
+        target.property_type,
+        Math.floor(target.price * (1 - PRICE_BAND_WIDE)),
+        Math.ceil(target.price * (1 + PRICE_BAND_WIDE)),
+      ],
+    );
+    return markNew(rankSimilar(target, candidates, limit));
+  } catch (error) {
+    console.error("[queries] similar listings", error);
+    return [] as ListingCard[];
+  }
 }
 
 export async function getAllPublicRefs() {

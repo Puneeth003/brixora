@@ -2,13 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { getPublicProperty } from "@/lib/queries";
+import { getPublicProperty, getSimilarListings } from "@/lib/queries";
 import { formatDate, formatNumber, formatPrice, displayPhone } from "@/lib/format";
 import { furnishingLabel, propertyTypeLabel } from "@/lib/constants";
 import { propertyUrl, publicImageUrl, site, whatsappLink } from "@/lib/site";
 import { Gallery } from "@/components/public/Gallery";
 import { EmiCalculator } from "@/components/public/EmiCalculator";
 import { EnquiryForm } from "@/components/public/EnquiryForm";
+import { PropertyCard } from "@/components/public/PropertyCard";
+import { ShareButtons } from "@/components/public/ShareButtons";
+import { pricePerSqft, shareLinks } from "@/lib/listing-facts";
 import { SaveButton } from "@/components/account/AccountForms";
 import { ShieldIcon } from "@/components/icons";
 
@@ -41,7 +44,9 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
   const { ref } = await params;
   const data = await getPublicProperty(ref);
   if (!data) notFound();
-  const { property: p, images } = data;
+  const { property: p, images, isNew } = data;
+  const perSqft = pricePerSqft(p);
+  const share = shareLinks({ title: p.title, priceText: formatPrice(p.price, p.listing_type), locality: `${p.locality}, ${p.city}`, url: propertyUrl(p.reference_no) });
 
   const gallery = images.map((i) => ({ id: i.id, url: publicImageUrl(i.watermarked_path)! }));
   const wa = whatsappLink(`Hi ${site.name}, I'm interested in property ${p.reference_no}: ${propertyUrl(p.reference_no)}`);
@@ -51,6 +56,7 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
     ["Bedrooms", p.bedrooms ? `${p.bedrooms} BHK` : null],
     ["Bathrooms", p.bathrooms ? String(p.bathrooms) : null],
     ["Area", p.area_sqft ? `${formatNumber(p.area_sqft)} sq.ft` : null],
+    ["Price per sq.ft", perSqft ? `₹${formatNumber(perSqft)}` : null],
     ["Furnishing", furnishingLabel(p.furnishing)],
     ["Floor", p.floor],
     ["Age", p.property_age],
@@ -89,6 +95,7 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="badge bg-brand-100 text-brand-800">{p.listing_type === "rent" ? "For rent" : "For sale"}</span>
+              {isNew && <span className="badge bg-gold-300 text-ink">New</span>}
               {p.featured && <span className="badge bg-amber-100 text-amber-800">Featured</span>}
               {p.verified_at && (
                 <span className="badge gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
@@ -105,6 +112,7 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
               {formatPrice(p.price, p.listing_type)}
               {p.price_negotiable && <span className="ml-2 text-base font-normal text-zinc-500">Negotiable</span>}
             </p>
+            {perSqft && <p className="mt-1 text-sm text-zinc-500">₹{formatNumber(perSqft)} per sq.ft</p>}
           </div>
 
           <section className="card p-5">
@@ -183,6 +191,7 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
             <EnquiryForm refNo={p.reference_no} />
           </div>
           <SaveButton propertyId={p.id} refNo={p.reference_no} />
+          <ShareButtons title={p.title} text={share.text} url={propertyUrl(p.reference_no)} whatsappHref={share.whatsapp} />
           {p.verified_at && (
             <div className="card flex items-start gap-3 p-4 text-sm">
               <ShieldIcon className="mt-0.5 size-5! text-emerald-600" />
@@ -206,7 +215,45 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
           </div>
         </aside>
       </div>
+
+      <Suspense fallback={null}>
+        <Similar
+          target={{ id: p.id, listing_type: p.listing_type, property_type: p.property_type, locality: p.locality, price: p.price, bedrooms: p.bedrooms }}
+        />
+      </Suspense>
     </>
+  );
+}
+
+/** Other live listings like this one; nothing is shown when there are none. */
+async function Similar({ target }: { target: Parameters<typeof getSimilarListings>[0] }) {
+  const items = await getSimilarListings(target);
+  if (!items.length) return null;
+  // Only point at the locality when it has more to show than the listing being viewed.
+  const local = items.some((item) => item.locality.trim().toLowerCase() === target.locality.trim().toLowerCase());
+  const query = `listing=${target.listing_type}${local ? `&locality=${encodeURIComponent(target.locality)}` : ""}`;
+  const more = local ? `More in ${target.locality}` : target.listing_type === "rent" ? "All properties for rent" : "All properties for sale";
+  return (
+    <section className="mt-12 border-t border-zinc-200 pt-8" aria-labelledby="similar-title">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 id="similar-title" className="text-xl font-semibold tracking-tight">
+            Similar properties
+          </h2>
+          <p className="text-sm text-zinc-500">
+            {target.listing_type === "rent" ? "For rent" : "For sale"}, close to this one in location, type or price.
+          </p>
+        </div>
+        <Link href={`/properties?${query}`} className="text-sm font-semibold text-brand-700 hover:underline">
+          {more} →
+        </Link>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((item) => (
+          <PropertyCard key={item.id} p={item} />
+        ))}
+      </div>
+    </section>
   );
 }
 

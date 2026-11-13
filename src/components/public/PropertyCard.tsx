@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { formatNumber, formatPrice } from "@/lib/format";
 import { propertyTypeLabel } from "@/lib/constants";
+import { pricePerSqft } from "@/lib/listing-facts";
 import { publicImageUrl } from "@/lib/site";
 import { AreaIcon, BathIcon, BedIcon, MapPinIcon, ShieldIcon } from "@/components/icons";
 import type { ListingCard } from "@/lib/queries";
@@ -9,6 +10,7 @@ import type { ListingCard } from "@/lib/queries";
 export function PropertyCard({ p }: { p: ListingCard }) {
   const img = publicImageUrl(p.cover_path);
   const rent = p.listing_type === "rent";
+  const perSqft = pricePerSqft(p);
 
   return (
     <Link
@@ -27,13 +29,12 @@ export function PropertyCard({ p }: { p: ListingCard }) {
         ) : (
           <div className="grid h-full place-items-center text-sm text-zinc-400">No photo</div>
         )}
-        <span
-          className={`absolute top-3 left-3 rounded-md px-2.5 py-1 text-xs font-semibold text-white shadow ${
-            rent ? "bg-emerald-500" : "bg-brand-600"
-          }`}
-        >
-          {rent ? "For Rent" : "For Sale"}
-        </span>
+        <div className="absolute top-3 left-3 flex items-center gap-1.5">
+          <span className={`rounded-md px-2.5 py-1 text-xs font-semibold text-white shadow ${rent ? "bg-emerald-500" : "bg-brand-600"}`}>
+            {rent ? "For Rent" : "For Sale"}
+          </span>
+          {p.is_new && <span className="rounded-md bg-gold-400 px-2 py-1 text-xs font-semibold text-ink shadow">New</span>}
+        </div>
         {p.featured && (
           <span className="absolute top-3 right-3 rounded-md bg-white/95 px-2 py-1 text-xs font-semibold text-amber-600 shadow">
             ★ Featured
@@ -47,10 +48,13 @@ export function PropertyCard({ p }: { p: ListingCard }) {
         )}
       </div>
       <div className="p-4">
-        <p className="text-lg font-bold text-brand-700">
-          {formatPrice(p.price, p.listing_type)}
-          {p.price_negotiable && <span className="ml-2 text-xs font-normal text-zinc-400">Negotiable</span>}
-        </p>
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-lg font-bold text-brand-700">
+            {formatPrice(p.price, p.listing_type)}
+            {p.price_negotiable && <span className="ml-2 text-xs font-normal text-zinc-400">Negotiable</span>}
+          </p>
+          {perSqft && <p className="shrink-0 text-xs font-medium whitespace-nowrap text-zinc-500">₹{formatNumber(perSqft)}/sq.ft</p>}
+        </div>
         <h3 className="mt-1 line-clamp-1 font-semibold text-ink">{p.title}</h3>
         <p className="mt-1 flex items-center gap-1 text-sm text-zinc-500">
           <MapPinIcon className="size-3.5!" />

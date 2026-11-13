@@ -70,6 +70,7 @@ async function Results({ searchParams }: Pick<PageProps<"/properties">, "searchP
               ["", "Newest"],
               ["price_asc", "Price ↑"],
               ["price_desc", "Price ↓"],
+              ["sqft_asc", "₹/sq.ft ↑"],
             ].map(([value, label]) => (
               <Link
                 key={value}
