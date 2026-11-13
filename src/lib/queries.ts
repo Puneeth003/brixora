@@ -5,6 +5,7 @@ import { PAGE_SIZE, PROPERTY_TYPES } from "./constants";
 import { sampleImages, sampleProperties } from "./samples";
 import { byPricePerSqft, isNewOnSite } from "./listing-facts";
 import { PRICE_BAND_WIDE, rankSimilar } from "./similar";
+import { inRecentOrder } from "./recently-viewed";
 import { visitDateRange } from "./visit-request";
 import type { PublicProperty } from "./types";
 
@@ -278,6 +279,25 @@ export async function getSimilarListings(
     return markNew(rankSimilar(target, candidates, limit));
   } catch (error) {
     console.error("[queries] similar listings", error);
+    return [] as ListingCard[];
+  }
+}
+
+/** Cards for the given references, in that order. References that are not live are left out. */
+export async function getListingsByRefs(refs: string[]) {
+  "use cache";
+  cacheLife("minutes");
+  cacheTag("listings");
+
+  if (!refs.length) return [] as ListingCard[];
+  if (!dbConfigured) {
+    return markNew(inRecentOrder(refs, sampleProperties.filter((p) => refs.includes(p.reference_no)) as ListingCard[]));
+  }
+  try {
+    const rows = await db.all<ListingCard>(`SELECT ${LIST_COLUMNS} FROM public_properties WHERE reference_no IN (?)`, [refs]);
+    return markNew(inRecentOrder(refs, rows));
+  } catch (error) {
+    console.error("[queries] listings by ref", error);
     return [] as ListingCard[];
   }
 }

@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { getLocalities, getPublicListings, type ListingFilters } from "@/lib/queries";
 import { PropertyCard, PropertyCardSkeleton } from "@/components/public/PropertyCard";
 import { Filters } from "@/components/public/Filters";
+import { RecentlyViewed } from "@/components/public/RecentlyViewed";
 import { Pagination } from "@/components/Pagination";
 import { site } from "@/lib/site";
 
@@ -100,6 +101,8 @@ async function Results({ searchParams }: Pick<PageProps<"/properties">, "searchP
         )}
 
         <Pagination page={page} pages={pages} basePath="/properties" params={f} />
+
+        <RecentlyViewed className="mt-12 border-t border-zinc-200 pt-8" />
       </section>
     </div>
   );

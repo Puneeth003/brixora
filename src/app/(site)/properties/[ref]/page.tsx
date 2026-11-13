@@ -11,6 +11,7 @@ import { EmiCalculator } from "@/components/public/EmiCalculator";
 import { EnquiryForm } from "@/components/public/EnquiryForm";
 import { PropertyCard } from "@/components/public/PropertyCard";
 import { ShareButtons } from "@/components/public/ShareButtons";
+import { RecentlyViewed } from "@/components/public/RecentlyViewed";
 import { pricePerSqft, shareLinks } from "@/lib/listing-facts";
 import { SaveButton } from "@/components/account/AccountForms";
 import { ShieldIcon } from "@/components/icons";
@@ -223,6 +224,8 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
           target={{ id: p.id, listing_type: p.listing_type, property_type: p.property_type, locality: p.locality, price: p.price, bedrooms: p.bedrooms }}
         />
       </Suspense>
+
+      <RecentlyViewed currentRef={p.reference_no} className="mt-12 border-t border-zinc-200 pt-8" />
     </>
   );
 }
