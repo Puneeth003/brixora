@@ -113,6 +113,9 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
               {p.price_negotiable && <span className="ml-2 text-base font-normal text-zinc-500">Negotiable</span>}
             </p>
             {perSqft && <p className="mt-1 text-sm text-zinc-500">₹{formatNumber(perSqft)} per sq.ft</p>}
+            <div className="mt-4">
+              <ShareButtons title={p.title} text={share.text} url={propertyUrl(p.reference_no)} whatsappHref={share.whatsapp} />
+            </div>
           </div>
 
           <section className="card p-5">
@@ -191,7 +194,6 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
             <EnquiryForm refNo={p.reference_no} />
           </div>
           <SaveButton propertyId={p.id} refNo={p.reference_no} />
-          <ShareButtons title={p.title} text={share.text} url={propertyUrl(p.reference_no)} whatsappHref={share.whatsapp} />
           {p.verified_at && (
             <div className="card flex items-start gap-3 p-4 text-sm">
               <ShieldIcon className="mt-0.5 size-5! text-emerald-600" />
