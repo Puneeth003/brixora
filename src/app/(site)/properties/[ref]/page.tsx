@@ -12,6 +12,7 @@ import { EnquiryForm } from "@/components/public/EnquiryForm";
 import { PropertyCard } from "@/components/public/PropertyCard";
 import { ShareButtons } from "@/components/public/ShareButtons";
 import { RecentlyViewed } from "@/components/public/RecentlyViewed";
+import { CompareButton } from "@/components/public/Compare";
 import { pricePerSqft, shareLinks } from "@/lib/listing-facts";
 import { SaveButton } from "@/components/account/AccountForms";
 import { ShieldIcon } from "@/components/icons";
@@ -116,6 +117,9 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
             {perSqft && <p className="mt-1 text-sm text-zinc-500">₹{formatNumber(perSqft)} per sq.ft</p>}
             <div className="mt-4">
               <ShareButtons title={p.title} text={share.text} url={propertyUrl(p.reference_no)} whatsappHref={share.whatsapp} />
+            </div>
+            <div className="mt-3">
+              <CompareButton refNo={p.reference_no} />
             </div>
           </div>
 

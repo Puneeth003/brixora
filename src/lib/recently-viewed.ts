@@ -9,8 +9,17 @@ export const RECENT_SHOWN = 3;
 
 const REF = /^[A-Za-z0-9-]{3,40}$/;
 
+export function isListingRef(ref: string) {
+  return REF.test(ref);
+}
+
 /** A clean list of references from whatever was stored (or sent to the server). Never throws. */
 export function parseRecent(raw: unknown): string[] {
+  return parseRefs(raw, RECENT_MAX);
+}
+
+/** Up to `max` distinct, well-formed listing references from stored text or a posted value. */
+export function parseRefs(raw: unknown, max: number): string[] {
   let value = raw;
   if (typeof raw === "string") {
     try {
@@ -26,14 +35,14 @@ export function parseRecent(raw: unknown): string[] {
     if (typeof item !== "string" || !REF.test(item) || seen.has(item)) continue;
     seen.add(item);
     out.push(item);
-    if (out.length === RECENT_MAX) break;
+    if (out.length === max) break;
   }
   return out;
 }
 
 /** The list with `ref` moved to the front, most recent first, capped at RECENT_MAX. */
 export function addRecent(list: string[], ref: string): string[] {
-  if (!REF.test(ref)) return parseRecent(list);
+  if (!isListingRef(ref)) return parseRecent(list);
   return parseRecent([ref, ...list.filter((r) => r !== ref)]);
 }
 
