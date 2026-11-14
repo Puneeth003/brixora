@@ -6,6 +6,7 @@ import { getLocalities, getPublicListings } from "@/lib/queries";
 import { slugify } from "@/lib/format";
 import { site } from "@/lib/site";
 import { PropertyCard, PropertyCardSkeleton } from "@/components/public/PropertyCard";
+import { LocalityMap } from "@/components/public/LocalityMap";
 
 async function findLocality(slug: string) {
   const all = await getLocalities();
@@ -84,6 +85,9 @@ async function Content({ params }: Pick<PageProps<"/localities/[slug]">, "params
           </section>
         );
       })}
+      <div className="mt-12 border-t border-zinc-200 pt-8">
+        <LocalityMap locality={loc.locality} city={loc.city} />
+      </div>
     </>
   );
 }

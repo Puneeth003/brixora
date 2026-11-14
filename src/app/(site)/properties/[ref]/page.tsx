@@ -13,6 +13,7 @@ import { PropertyCard } from "@/components/public/PropertyCard";
 import { ShareButtons } from "@/components/public/ShareButtons";
 import { RecentlyViewed } from "@/components/public/RecentlyViewed";
 import { CompareButton } from "@/components/public/Compare";
+import { LocalityMap } from "@/components/public/LocalityMap";
 import { pricePerSqft, shareLinks } from "@/lib/listing-facts";
 import { SaveButton } from "@/components/account/AccountForms";
 import { ShieldIcon } from "@/components/icons";
@@ -185,9 +186,11 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
 
           {p.listing_type === "sale" && p.price > 0 && <EmiCalculator price={p.price} />}
 
-          <p className="text-xs text-zinc-500">
-            Location shown at locality level to protect owner privacy. Exact address shared by our team on request.
-          </p>
+          <LocalityMap
+            locality={p.locality}
+            city={p.city}
+            note="The map shows the locality, not this property: the exact address is kept private and shared by our team on request."
+          />
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
