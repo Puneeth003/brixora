@@ -7,6 +7,7 @@ import { sampleImages, sampleProperties } from "./samples";
 import { byPricePerSqft, isNewOnSite } from "./listing-facts";
 import { PRICE_BAND_WIDE, rankSimilar } from "./similar";
 import { inRecentOrder } from "./recently-viewed";
+import { buildPriceStats, type StatRow } from "./price-stats";
 import { visitDateRange } from "./visit-request";
 import type { PublicProperty } from "./types";
 
@@ -257,6 +258,23 @@ export async function getListingStats() {
     forRent: rows.filter((r) => r.listing_type === "rent").length,
     localities: new Set(rows.map((r) => r.locality.trim().toLowerCase())).size,
   };
+}
+
+/** Typical asking prices by locality, from the listings live today (see price-stats.ts). */
+export async function getPriceStats() {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("listings");
+
+  try {
+    const rows: StatRow[] = dbConfigured
+      ? await db.all<StatRow>("SELECT listing_type, property_type, locality, price, area_sqft FROM public_properties")
+      : sampleProperties;
+    return buildPriceStats(rows);
+  } catch (error) {
+    console.error("[queries] price stats", error);
+    return buildPriceStats([]);
+  }
 }
 
 export async function getPublicProperty(ref: string) {

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { getLocalities, getPublicListings } from "@/lib/queries";
+import { getLocalities, getPriceStats, getPublicListings } from "@/lib/queries";
+import { LocalityPrices } from "@/components/public/PriceFigures";
 import { slugify } from "@/lib/format";
 import { site } from "@/lib/site";
 import { PropertyCard, PropertyCardSkeleton } from "@/components/public/PropertyCard";
@@ -44,9 +45,10 @@ export default function LocalityPage({ params }: PageProps<"/localities/[slug]">
 async function Content({ params }: Pick<PageProps<"/localities/[slug]">, "params">) {
   const loc = await findLocality((await params).slug);
   if (!loc) notFound();
-  const [sale, rent] = await Promise.all([
+  const [sale, rent, stats] = await Promise.all([
     getPublicListings({ locality: loc.locality, listing: "sale" }),
     getPublicListings({ locality: loc.locality, listing: "rent" }),
+    getPriceStats(),
   ]);
 
   return (
@@ -58,6 +60,7 @@ async function Content({ params }: Pick<PageProps<"/localities/[slug]">, "params
         {loc.count} verified {loc.count === 1 ? "listing" : "listings"} in {loc.locality}. Every property is checked by
         the {site.name} team before it goes live, and all enquiries are handled by us.
       </p>
+      <LocalityPrices stats={stats} locality={loc.locality} />
       {[
         ["For sale", sale, "sale"],
         ["For rent", rent, "rent"],

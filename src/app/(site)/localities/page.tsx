@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getLocalities } from "@/lib/queries";
-import { slugify } from "@/lib/format";
+import { getLocalities, getPriceStats } from "@/lib/queries";
+import { formatNumber, slugify } from "@/lib/format";
+import { MIN_SAMPLE, localityKey } from "@/lib/price-stats";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function LocalitiesPage() {
-  const localities = await getLocalities();
+  const [localities, stats] = await Promise.all([getLocalities(), getPriceStats()]);
   return (
     <div className="container-page py-10">
       <h1 className="text-2xl font-semibold tracking-tight">Browse by locality</h1>
@@ -24,6 +25,13 @@ export default async function LocalitiesPage() {
                 <p className="text-sm text-zinc-500">
                   {l.count} {l.count === 1 ? "listing" : "listings"} · {l.city}
                 </p>
+                {(() => {
+                  // Shown only where there are enough homes for sale to call a rate typical.
+                  const homes = stats.saleRate[localityKey(l.locality)]?.homes;
+                  return homes && homes.count >= MIN_SAMPLE ? (
+                    <p className="mt-1 text-sm text-zinc-700">Homes around ₹{formatNumber(homes.typical)} per sq.ft</p>
+                  ) : null;
+                })()}
               </Link>
             </li>
           ))}

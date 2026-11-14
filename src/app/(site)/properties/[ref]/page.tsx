@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { getPublicProperty, getSimilarListings } from "@/lib/queries";
+import { getPriceStats, getPublicProperty, getSimilarListings } from "@/lib/queries";
+import { checkPrice } from "@/lib/price-stats";
+import { PriceCheckNote } from "@/components/public/PriceFigures";
 import { formatDate, formatNumber, formatPrice, displayPhone } from "@/lib/format";
 import { furnishingLabel, propertyTypeLabel } from "@/lib/constants";
 import { propertyUrl, publicImageUrl, site, whatsappLink } from "@/lib/site";
@@ -49,6 +51,7 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
   if (!data) notFound();
   const { property: p, images, isNew, visitDates } = data;
   const perSqft = pricePerSqft(p);
+  const priceCheck = perSqft ? checkPrice(await getPriceStats(), p) : null;
   const share = shareLinks({ title: p.title, priceText: formatPrice(p.price, p.listing_type), locality: `${p.locality}, ${p.city}`, url: propertyUrl(p.reference_no) });
 
   const gallery = images.map((i) => ({ id: i.id, url: publicImageUrl(i.watermarked_path)! }));
@@ -116,6 +119,7 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
               {p.price_negotiable && <span className="ml-2 text-base font-normal text-zinc-500">Negotiable</span>}
             </p>
             {perSqft && <p className="mt-1 text-sm text-zinc-500">₹{formatNumber(perSqft)} per sq.ft</p>}
+            {priceCheck && <PriceCheckNote check={priceCheck} locality={p.locality} city={p.city} />}
             <div className="mt-4">
               <ShareButtons title={p.title} text={share.text} url={propertyUrl(p.reference_no)} whatsappHref={share.whatsapp} />
             </div>
