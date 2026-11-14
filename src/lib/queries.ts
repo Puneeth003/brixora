@@ -1,7 +1,8 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import { db, dbConfigured, likeEscape } from "./db";
-import { PAGE_SIZE, PROPERTY_TYPES } from "./constants";
+import { AMENITIES, PAGE_SIZE, PROPERTY_TYPES } from "./constants";
+import { parseAmenities, parseListedDays, parseMinArea, parseMinBaths } from "./listing-filters";
 import { sampleImages, sampleProperties } from "./samples";
 import { byPricePerSqft, isNewOnSite } from "./listing-facts";
 import { PRICE_BAND_WIDE, rankSimilar } from "./similar";
@@ -21,6 +22,12 @@ export type ListingFilters = {
   budget?: string;
   bhk?: string;
   furnishing?: string;
+  /** More filters (see listing-filters.ts). */
+  area?: string; // smallest area in sq.ft
+  bath?: string; // fewest bathrooms
+  listed?: string; // went live within this many days
+  verified?: string; // "1": verified on site only
+  amenity?: string; // comma-separated amenity names; a listing must have them all
   sort?: string;
   page?: string;
 };
@@ -75,9 +82,19 @@ function demoListings(f: ListingFilters, page: number) {
   const { min, max } = parseBudget(f.budget);
   const term = f.q?.trim().toLowerCase();
   const bhk = Number(f.bhk) || 0;
+  const minArea = parseMinArea(f.area);
+  const minBaths = parseMinBaths(f.bath);
+  const listedDays = parseListedDays(f.listed);
+  const listedSince = listedDays ? Date.now() - listedDays * 86_400_000 : null;
+  const amenities = parseAmenities(f.amenity, AMENITIES);
 
   let rows = sampleProperties.filter(
     (p) =>
+      (!minArea || (p.area_sqft ?? 0) >= minArea) &&
+      (!minBaths || (p.bathrooms ?? 0) >= minBaths) &&
+      (!listedSince || (p.approved_at !== null && Date.parse(p.approved_at) >= listedSince)) &&
+      (f.verified !== "1" || Boolean(p.verified_at)) &&
+      amenities.every((a) => p.amenities.includes(a)) &&
       (!f.listing || p.listing_type === f.listing) &&
       (!types.length || types.includes(p.property_type)) &&
       (!f.locality || p.locality.toLowerCase() === f.locality.toLowerCase()) &&
@@ -140,6 +157,27 @@ export async function getPublicListings(f: ListingFilters) {
   if (max) {
     where.push("price <= ?");
     values.push(max);
+  }
+  const minArea = parseMinArea(f.area);
+  if (minArea) {
+    where.push("area_sqft >= ?");
+    values.push(minArea);
+  }
+  const minBaths = parseMinBaths(f.bath);
+  if (minBaths) {
+    where.push("bathrooms >= ?");
+    values.push(minBaths);
+  }
+  const listedDays = parseListedDays(f.listed);
+  if (listedDays) {
+    where.push("approved_at >= ?");
+    values.push(new Date(Date.now() - listedDays * 86_400_000));
+  }
+  if (f.verified === "1") where.push("verified_at IS NOT NULL");
+  for (const amenity of parseAmenities(f.amenity, AMENITIES)) {
+    // amenities is a JSON array of names; the listing must have every one asked for.
+    where.push("JSON_CONTAINS(amenities, JSON_QUOTE(?))");
+    values.push(amenity);
   }
   const term = f.q?.trim().slice(0, 80);
   if (term) {

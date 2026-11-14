@@ -13,14 +13,15 @@ export const metadata: Metadata = {
   description: `Verified apartments, villas, plots and commercial properties for sale and rent in ${site.defaultCity}.`,
 };
 
-const KEYS = ["q", "locality", "listing", "type", "budget", "bhk", "furnishing", "sort", "page"] as const;
+const KEYS = ["q", "locality", "listing", "type", "budget", "bhk", "furnishing", "area", "bath", "listed", "verified", "amenity", "sort", "page"] as const;
 
 function pick(sp: Record<string, string | string[] | undefined>): ListingFilters {
   const f: ListingFilters = {};
   for (const k of KEYS) {
     const v = sp[k];
-    const s = Array.isArray(v) ? v[0] : v;
-    if (s) f[k] = s.slice(0, 100);
+    // The amenity checkboxes arrive as repeated values; everything else is single.
+    const s = Array.isArray(v) ? (k === "amenity" ? v.join(",") : v[0]) : v;
+    if (s) f[k] = s.slice(0, k === "amenity" ? 300 : 100);
   }
   return f;
 }
