@@ -71,7 +71,7 @@ export default async function Home() {
   return (
     <>
       {/* Hero */}
-      <section className="relative isolate z-10 flex min-h-[640px] flex-col bg-[#fbf6ec] lg:min-h-[calc(100svh-4.75rem)]">
+      <section className="relative isolate z-10 flex min-h-[40rem] flex-col bg-[#fbf6ec] lg:min-h-[calc(100svh-4.75rem)]">
         <div className="absolute inset-0 -z-10">
           <Image
             src="/hero/hero-coast-villa.webp"
@@ -88,13 +88,13 @@ export default async function Home() {
         <div className="absolute inset-x-0 top-0 -z-10 h-1/2 bg-gradient-to-b from-[#fbf6ec]/35 to-transparent" />
         <div className="absolute inset-0 -z-10 bg-[#fbf6ec]/55 lg:hidden" />
 
-        <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-between gap-10 px-4 pt-12 pb-12 sm:px-6 lg:w-[84%] lg:px-0 lg:gap-[clamp(1.5rem,5vh,3rem)] lg:pt-[clamp(1.5rem,12vh,8rem)] lg:pb-[clamp(1.5rem,10vh,7rem)]">
+        <div className="mx-auto flex w-full max-w-[87.5rem] flex-1 flex-col justify-between gap-10 px-4 pt-12 pb-12 sm:px-6 lg:w-[84%] lg:px-0 lg:gap-10 lg:pt-24 lg:pb-20">
           <div>
             <span className="inline-flex items-center gap-2.5 rounded-full border border-gold-300/70 bg-white/90 px-4 py-2 text-sm font-medium lg:text-base text-zinc-800 shadow-sm backdrop-blur">
               <SunIcon className="text-gold-500" />
               Verified properties in {site.defaultCity}
             </span>
-            <h1 className="mt-6 text-4xl leading-[1.05] font-bold tracking-[-0.03em] text-ink sm:text-6xl lg:mt-[clamp(1rem,3vh,2rem)] lg:text-[clamp(2.75rem,8.5vh,5rem)] lg:leading-[1.02]">
+            <h1 className="mt-6 text-4xl leading-[1.05] font-bold tracking-[-0.03em] text-ink sm:text-6xl lg:mt-6 lg:text-[4.25rem] lg:leading-[1.02]">
               Find Your Dream
               <br />
               Home in{" "}
@@ -111,7 +111,7 @@ export default async function Home() {
                 className="ml-[0.02em] inline-block h-[1.15em] w-auto max-w-full align-[-0.45em]"
               />
             </h1>
-            <p className="mt-6 max-w-[34rem] text-lg leading-relaxed text-zinc-600 sm:text-xl lg:mt-[clamp(1rem,3vh,2rem)] lg:text-[clamp(1.05rem,2.4vh,1.375rem)]">
+            <p className="mt-6 max-w-[34rem] text-lg leading-relaxed text-zinc-600 sm:text-xl lg:mt-6 lg:text-[1.2rem]">
               Explore hand-checked homes, plots and commercial spaces across {site.defaultCity}, with one trusted advisor
               from first visit to registration.
             </p>

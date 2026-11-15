@@ -30,7 +30,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-200/70 bg-white/95 backdrop-blur">
-      <div className="relative mx-auto flex h-16 w-full max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6 lg:h-[4.75rem] lg:w-[84%] lg:px-0">
+      <div className="relative mx-auto flex h-16 w-full max-w-[87.5rem] items-center justify-between gap-4 px-4 sm:px-6 lg:h-[4.75rem] lg:w-[84%] lg:px-0">
         <BrandLogo />
         <div className="flex items-center gap-1 lg:gap-2">
           <Suspense fallback={null}>

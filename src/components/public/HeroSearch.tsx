@@ -29,7 +29,7 @@ export function HeroSearch({ localities }: { localities: string[] }) {
   const [tab, setTab] = useState<Tab>("sale");
 
   return (
-    <div className="relative w-full max-w-[1100px]">
+    <div className="relative w-full max-w-[68.75rem]">
       <div className="inline-flex items-center rounded-t-xl bg-white/95 p-1.5 pb-0 backdrop-blur">
         {TABS.map(({ key, label, icon }, i) => {
           const active = tab === key;

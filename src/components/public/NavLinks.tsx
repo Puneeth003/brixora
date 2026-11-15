@@ -52,7 +52,7 @@ export function NavLinks() {
             }`}
           >
             {l.label}
-            {active && <span className="absolute inset-x-4 -bottom-[13px] h-0.5 lg:-bottom-[22px] lg:h-[3px] rounded-full bg-gold-500" />}
+            {active && <span className="absolute inset-x-4 -bottom-[13px] h-0.5 lg:-bottom-[1.375rem] lg:h-[0.1875rem] rounded-full bg-gold-500" />}
           </Link>
         );
       })}

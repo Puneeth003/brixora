@@ -7,7 +7,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
   return (
     <>
       <SiteHeader />
-      <main className="flex-1">{children}</main>
+      <main className="site-fluid flex-1">{children}</main>
       <SiteFooter />
       {/* Reads the address in the browser, so it must not hold up the prerendered page. */}
       <Suspense fallback={null}>
