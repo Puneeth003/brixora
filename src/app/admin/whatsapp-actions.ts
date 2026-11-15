@@ -31,23 +31,6 @@ async function call<T>(url: string, init: RequestInit & { token?: string } = {})
 const setConfig = (name: string, value: string) =>
   db.run("INSERT INTO app_config (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [name, value]);
 
-/** Contacts and chat history from the phone app. Meta only accepts these within 24 h of onboarding. */
-async function requestSync(token: string, phoneNumberId: string) {
-  const errors: string[] = [];
-  for (const sync_type of ["smb_app_state_sync", "history"]) {
-    try {
-      await call(graph(`${phoneNumberId}/smb_app_data`), {
-        method: "POST",
-        token,
-        body: JSON.stringify({ messaging_product: "whatsapp", sync_type }),
-      });
-    } catch (e) {
-      errors.push(`${sync_type}: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
-  return errors;
-}
-
 export async function connectWhatsApp(input: { code: string; wabaId: string; phoneNumberId?: string }): Promise<ActionState> {
   const admin = await requireAdmin();
   const appId = process.env.META_APP_ID;
@@ -99,11 +82,8 @@ export async function connectWhatsApp(input: { code: string; wabaId: string; pho
       diff: { number: number.display_phone_number ?? null },
     });
 
-    const syncErrors = await requestSync(token, phoneNumberId);
     revalidatePath("/admin/settings");
-    return syncErrors.length
-      ? { ok: true, message: `Connected ${number.display_phone_number ?? ""}. Chat sync didn't start (${syncErrors.join("; ")}). Messaging works.` }
-      : { ok: true, message: `Connected ${number.display_phone_number ?? ""}. Contacts and chat history are syncing.` };
+    return { ok: true, message: `Connected ${number.display_phone_number ?? ""}. Existing contacts and chat history were not synced.` };
   } catch (e) {
     return { ok: false, error: `Meta: ${e instanceof Error ? e.message : String(e)}` };
   }
