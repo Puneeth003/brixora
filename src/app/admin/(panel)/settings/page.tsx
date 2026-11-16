@@ -176,8 +176,10 @@ function UsersSection() {
 
 async function WhatsAppSection() {
   const conn = await whatsappConnection();
-  const appId = process.env.META_APP_ID;
-  const configId = process.env.WHATSAPP_ES_CONFIG_ID;
+  const configured = (value: string | undefined) => Boolean(value?.trim() && !/[<>]|placeholder|\bLATER\b/i.test(value));
+  const appId = configured(process.env.META_APP_ID) ? process.env.META_APP_ID!.trim() : "";
+  const configId = configured(process.env.WHATSAPP_ES_CONFIG_ID) ? process.env.WHATSAPP_ES_CONFIG_ID!.trim() : "";
+  const appSecretReady = configured(process.env.WHATSAPP_APP_SECRET);
   const envProblems = whatsappEnvProblems();
   const forwardTo = brokeragePhone();
   const selfForward = Boolean(conn?.displayPhone && forwardTo && normalizePhone(conn.displayPhone) === forwardTo);
@@ -211,14 +213,14 @@ async function WhatsAppSection() {
         {!conn && envProblems.length > 0 && (
           <p className="mb-5 rounded-xl bg-[var(--s-seg)] p-3 text-sm text-[var(--s-late)]">
             {envProblems.join(" and ")} {envProblems.length > 1 ? "are" : "is"} set on the server but still {envProblems.length > 1 ? "hold placeholder text" : "holds placeholder text"}, not
-            a real value. Replace {envProblems.length > 1 ? "them" : "it"} with the access token and phone number ID from Meta → WhatsApp → API Setup, then redeploy.
+            a real value. These are optional manual Cloud API fallback credentials. A successful WhatsApp Business app signup stores the production credentials automatically; do not use Meta&apos;s test sender credentials for this production number.
           </p>
         )}
-        {appId && configId ? (
+        {appId && configId && appSecretReady ? (
           <WhatsAppConnect appId={appId} configId={configId} version={graphVersion()} connected={conn?.source === "connected"} />
         ) : (
           <p className="text-sm text-[var(--s-text-2)]">
-            Set <code>META_APP_ID</code>, <code>WHATSAPP_ES_CONFIG_ID</code> and <code>WHATSAPP_APP_SECRET</code> to connect from here.
+            Set valid <code>META_APP_ID</code>, <code>WHATSAPP_ES_CONFIG_ID</code> and <code>WHATSAPP_APP_SECRET</code> values on the server to enable signup. After Meta approves the partner setup, use this button to connect the production number; credentials are stored automatically.
           </p>
         )}
         {selfForward && (
@@ -233,7 +235,7 @@ async function WhatsAppSection() {
           <li>Have the phone with the WhatsApp Business app (latest version) nearby. Meta shows a QR code or prompt to confirm in the app.</li>
           <li>Open the WhatsApp Business app at least once every 14 days, or Meta disconnects the API.</li>
           <li>Chats sent from the app and from the website show up in the same conversation on the phone.</li>
-          <li>Chat history can only be imported within 24 hours of connecting, so finish setup in one go.</li>
+          <li>When Meta asks, choose to connect without importing existing contacts or chat history.</li>
         </ul>
       </Card>
     </>

@@ -12,7 +12,10 @@ import type { ActionState } from "@/lib/types";
 // postMessage from facebook.com carries the WABA (and usually the phone number) ID. Either can arrive
 // first, so both are collected before calling the server.
 
-type FbLoginResponse = { authResponse?: { code?: string } | null };
+type FbLoginResponse = {
+  authResponse?: { code?: string } | null;
+  error?: { message?: string; code?: number; error_subcode?: number };
+};
 
 declare global {
   interface Window {
@@ -57,7 +60,18 @@ export function WhatsAppConnect({ appId, configId, version, connected }: { appId
   const [state, setState] = useState<ActionState>(null);
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState(false);
-  const signup = useRef<{ code?: string; wabaId?: string; phoneNumberId?: string }>({});
+  const signup = useRef<{
+    code?: string;
+    wabaId?: string;
+    phoneNumberId?: string;
+    error?: string;
+    errorTimer?: ReturnType<typeof setTimeout>;
+  }>({});
+
+  function clearErrorTimer() {
+    if (signup.current.errorTimer) clearTimeout(signup.current.errorTimer);
+    signup.current.errorTimer = undefined;
+  }
 
   useEffect(() => {
     loadSdk(appId, version).catch(() => setState({ ok: false, error: "Couldn't load Facebook. Check ad blockers and try again." }));
@@ -74,15 +88,23 @@ export function WhatsAppConnect({ appId, configId, version, connected }: { appId
       }
       if (data?.type !== "WA_EMBEDDED_SIGNUP") return;
       if (data.event === "FINISH" || data.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING") {
+        clearErrorTimer();
         signup.current.wabaId = data.data?.waba_id;
         signup.current.phoneNumberId = data.data?.phone_number_id;
         finish();
       } else if (data.event === "CANCEL") {
+        clearErrorTimer();
         setBusy(false);
-        setState({ ok: false, error: data.data?.error_message ? `Meta: ${data.data.error_message}` : "Signup was closed before it finished." });
+        const error = data.data?.error_message ? `Meta: ${data.data.error_message}` : "Signup was closed before it finished. No number was connected.";
+        signup.current.error = error;
+        setState({ ok: false, error });
       } else if (data.event === "ERROR") {
+        clearErrorTimer();
         setBusy(false);
-        setState({ ok: false, error: `Meta: ${data.data?.error_message ?? "signup failed"}` });
+        const code = data.data?.error_code;
+        const error = `Meta: ${data.data?.error_message ?? "signup failed"}${code ? ` (code ${code})` : ""}`;
+        signup.current.error = error;
+        setState({ ok: false, error });
       }
     }
     window.addEventListener("message", onMessage);
@@ -92,6 +114,7 @@ export function WhatsAppConnect({ appId, configId, version, connected }: { appId
   function finish() {
     const { code, wabaId, phoneNumberId } = signup.current;
     if (!code || !wabaId) return;
+    clearErrorTimer();
     signup.current = {};
     startTransition(async () => {
       setState(await connectWhatsApp({ code, wabaId, phoneNumberId }));
@@ -101,6 +124,7 @@ export function WhatsAppConnect({ appId, configId, version, connected }: { appId
 
   function start() {
     if (!window.FB) return setState({ ok: false, error: "Facebook is still loading. Try again in a moment." });
+    clearErrorTimer();
     signup.current = {};
     setState(null);
     setBusy(true);
@@ -108,8 +132,24 @@ export function WhatsAppConnect({ appId, configId, version, connected }: { appId
       (res) => {
         const code = res.authResponse?.code;
         if (!code) {
-          setBusy(false);
-          return setState((s) => s ?? { ok: false, error: "Facebook login was cancelled." });
+          const codeSuffix = res.error?.code ? ` (code ${res.error.code}${res.error.error_subcode ? `/${res.error.error_subcode}` : ""})` : "";
+          const error = res.error?.message
+            ? `Meta: ${res.error.message}${codeSuffix}`
+            : "Meta did not complete signup. No number was connected. If Meta showed a partner app setup or App Review warning, resolve that in Meta and retry.";
+          if (res.error?.message) {
+            clearErrorTimer();
+            signup.current.error = error;
+            setBusy(false);
+            setState({ ok: false, error });
+            return;
+          }
+          // Meta can send its WA_EMBEDDED_SIGNUP error event just after FB.login returns.
+          // Give that event time to provide the useful reason before showing a fallback.
+          signup.current.errorTimer = setTimeout(() => {
+            setBusy(false);
+            setState((previous) => previous ?? { ok: false, error: signup.current.error ?? error });
+          }, 1500);
+          return;
         }
         signup.current.code = code;
         finish();
@@ -122,6 +162,10 @@ export function WhatsAppConnect({ appId, configId, version, connected }: { appId
       },
     );
   }
+
+  useEffect(() => () => {
+    if (signup.current.errorTimer) clearTimeout(signup.current.errorTimer);
+  }, []);
 
   function disconnect() {
     if (!confirm("Disconnect this number from the website? The WhatsApp Business app on the phone keeps working.")) return;
