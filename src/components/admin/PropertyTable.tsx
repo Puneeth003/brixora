@@ -21,10 +21,11 @@ export type PropertyRow = Pick<
   | "approved_at"
   | "expires_at"
   | "rejected_reason"
+  | "verified_at"
 > & { owner_name: string | null };
 
 export const PROPERTY_ROW_SELECT =
-  "SELECT p.id, p.reference_no, p.title, p.status, p.price, p.listing_type, p.property_type, p.locality, p.featured, p.submitted_at, p.approved_at, p.expires_at, p.rejected_reason, u.name AS owner_name FROM properties p LEFT JOIN users u ON u.id = p.owner_id";
+  "SELECT p.id, p.reference_no, p.title, p.status, p.price, p.listing_type, p.property_type, p.locality, p.featured, p.submitted_at, p.approved_at, p.expires_at, p.rejected_reason, p.verified_at, u.name AS owner_name FROM properties p LEFT JOIN users u ON u.id = p.owner_id";
 
 const TYPE_TONES: Record<string, { mono: string; tone: string }> = {
   apartment: { mono: "AP", tone: "bg-sky-100 text-sky-800" },
@@ -101,11 +102,16 @@ export function PropertyTable({
               <td className="font-semibold whitespace-nowrap tabular-nums">{formatPrice(p.price, p.listing_type)}</td>
               <td>
                 <PropertyStatusBadge status={p.status} />
+                {(p.status === "pending" || p.status === "under_review") && (
+                  <span className={`mt-1 block text-[11px] font-bold ${p.verified_at ? "text-emerald-700" : "text-amber-700"}`}>
+                    {p.verified_at ? "✓ Audit passed" : "Awaiting site audit"}
+                  </span>
+                )}
               </td>
               <td className="whitespace-nowrap text-[var(--s-muted)]">{formatDate(p[dateField])}</td>
               {actions && (
                 <td className="text-right">
-                  <ListingRemoveMenu id={p.id} refNo={p.reference_no} title={p.title} status={p.status} />
+                  <ListingRemoveMenu id={p.id} refNo={p.reference_no} title={p.title} status={p.status} verified={Boolean(p.verified_at)} />
                 </td>
               )}
             </tr>

@@ -10,6 +10,7 @@ import { LISTING_TYPES, PROPERTY_TYPES } from "@/lib/constants";
 import { VERIFICATION_CHECKLIST } from "@/lib/verification-constants";
 import { SectionHeading } from "@/components/admin/ui";
 import type { ListingType, PropertyType, SiteVerification } from "@/lib/types";
+import { deleteVerificationPhoto } from "@/app/admin/verification-actions";
 import { VisitForm } from "./VisitForm";
 
 export const metadata: Metadata = { title: "Site visit" };
@@ -104,19 +105,28 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
   const lat = visit.latitude !== null ? Number(visit.latitude) : null;
   const lng = visit.longitude !== null ? Number(visit.longitude) : null;
 
+  const isAssignee = visit.assigned_to === staff.userId;
   const photoGrid = photos.length > 0 && (
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
       {photos.map((ph) => (
-        <a
-          key={ph.id}
-          href={`/admin/originals/${ph.storage_path}`}
-          target="_blank"
-          rel="noopener"
-          className="relative block aspect-square overflow-hidden rounded-2xl bg-[var(--s-seg)]"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element -- private, staff-only route */}
-          <img src={`/admin/originals/${ph.storage_path}`} alt="Visit photo" loading="lazy" className="size-full object-cover" />
-        </a>
+        <div key={ph.id} className="relative">
+          <a
+            href={`/admin/originals/${ph.storage_path}`}
+            target="_blank"
+            rel="noopener"
+            className="relative block aspect-square overflow-hidden rounded-2xl bg-[var(--s-seg)]"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- private, staff-only route */}
+            <img src={`/admin/originals/${ph.storage_path}`} alt="Visit photo" loading="lazy" className="size-full object-cover" />
+          </a>
+          {canAct && isAssignee && (
+            <form action={deleteVerificationPhoto.bind(null, ph.id)} className="absolute top-1.5 right-1.5">
+              <button className="rounded-lg bg-white/90 px-2 py-1 text-[11px] font-bold text-[var(--s-late)] shadow-sm" aria-label="Delete this photo">
+                Delete
+              </button>
+            </form>
+          )}
+        </div>
       ))}
     </div>
   );
@@ -224,7 +234,15 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
         </div>
 
         <div className="min-w-0 space-y-5">
-          {canAct ? (
+          {canAct && !isAssignee ? (
+            <section className="card space-y-2 p-5 sm:p-6 text-sm">
+              <p className="text-lg font-extrabold tracking-tight">Assigned to {visit.assignee_name ?? "someone else"}</p>
+              <p className="text-[var(--s-text-2)]">
+                Only the person assigned to this visit can complete it. To do it yourself, reassign it from the listing&apos;s On-site verification panel.
+              </p>
+              {photoGrid}
+            </section>
+          ) : canAct ? (
             <VisitForm visitId={visit.id} checklist={VERIFICATION_CHECKLIST} photoCount={photos.length}>
               {photoGrid}
             </VisitForm>

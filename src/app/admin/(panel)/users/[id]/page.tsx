@@ -19,7 +19,7 @@ type UserRow = {
   id: string;
   role: "admin" | "agent" | "owner";
   is_active: boolean | number;
-  agent_type: "agent" | "broker" | null;
+  agent_type: "agent" | "broker" | "auditor" | null;
   name: string | null;
   email: string | null;
   work_phone: string | null;
@@ -147,13 +147,16 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
       : u.role === "agent"
         ? u.agent_type === "broker"
           ? "Broker"
-          : "Agent"
+          : u.agent_type === "auditor"
+            ? "Auditor"
+            : "Agent"
         : memberStats.listings > 0
           ? "Owner"
           : "Visitor";
   const roleCls: Record<string, string> = {
     Admin: "bg-zinc-900 text-white",
     Agent: "bg-emerald-100 text-emerald-800",
+    Auditor: "bg-teal-100 text-teal-800",
     Broker: "bg-amber-100 text-amber-800",
     Owner: "bg-violet-100 text-violet-800",
     Visitor: "bg-sky-100 text-sky-800",

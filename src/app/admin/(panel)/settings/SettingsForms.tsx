@@ -81,13 +81,11 @@ export function OrganizationForm({
   sidebarColor,
   expiryDays,
   refPrefix,
-  requireVerification,
 }: {
   brandColor: string;
   sidebarColor: string;
   expiryDays: number;
   refPrefix: string;
-  requireVerification: boolean;
 }) {
   const [state, action, pending] = useActionState(saveOrganization, null);
   const [brand, setBrand] = useState(brandColor);
@@ -141,13 +139,6 @@ export function OrganizationForm({
         </div>
       </div>
 
-      <label className="flex items-start gap-2 text-sm text-[var(--s-text-2)]">
-        <input type="checkbox" name="require_site_verification" value="1" defaultChecked={requireVerification} className="mt-0.5" />
-        <span>
-          <span className="font-bold text-[var(--s-text)]">Require on-site verification before approving a listing</span>
-          <span className="block text-xs text-[var(--s-muted)]">Listings can only be approved after a completed site visit.</span>
-        </span>
-      </label>
 
       <div className="flex items-center gap-3">
         <button disabled={pending} className="btn-primary px-4 py-2 text-sm">

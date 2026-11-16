@@ -28,7 +28,7 @@ src/lib/crm-constants.ts pipeline, client types/sources, activity and agent-type
 src/lib/member.ts        member-account helpers (unread replies)
 src/lib/storage.ts       uploads on disk under UPLOAD_DIR
 db/schema.sql            base tables + public views
-db/migrations/           002_crm.sql, 003_accounts.sql, 004_site_verification.sql: apply in order after schema.sql
+db/migrations/           002 → 008: apply every file in number order after schema.sql (there is no 006)
 db/seed.sql              demo listings (generated)
 db/demo-workflow.sql     demo submissions, change requests, enquiries, message log
 db/demo-crm.sql          demo agents/broker, clients, conversations, a visitor member
@@ -69,6 +69,9 @@ mysql -u USER -p DBNAME < db/schema.sql
 mysql -u USER -p DBNAME < db/migrations/002_crm.sql
 mysql -u USER -p DBNAME < db/migrations/003_accounts.sql
 mysql -u USER -p DBNAME < db/migrations/004_site_verification.sql
+mysql -u USER -p DBNAME < db/migrations/005_whatsapp_connection.sql
+mysql -u USER -p DBNAME < db/migrations/007_keep_activity_history.sql
+mysql -u USER -p DBNAME < db/migrations/008_auditor_flow.sql
 # optional demo data, in this order:
 mysql -u USER -p DBNAME < db/seed.sql            # listings
 mysql -u USER -p DBNAME < db/demo-workflow.sql   # submissions, requests, enquiries, messages
@@ -87,7 +90,7 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
 
 1. **Database:**
    - hPanel → Databases → MySQL Databases → create a database and user.
-   - With phpMyAdmin → Import, import `db/schema.sql`, then `db/migrations/002_crm.sql`, then `db/migrations/003_accounts.sql`, then `db/migrations/004_site_verification.sql`.
+   - With phpMyAdmin → Import, import `db/schema.sql`, then every file in `db/migrations/` in number order (002, 003, 004, 005, 007, 008, …).
    - Optional demo data: `db/seed.sql`, `db/demo-workflow.sql`, `db/demo-crm.sql`.
    - Existing install: import only the migrations you haven't applied, in order.
 2. **Config values** (phpMyAdmin → SQL):

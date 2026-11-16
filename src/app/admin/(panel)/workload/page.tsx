@@ -18,7 +18,7 @@ type Staff = {
   name: string | null;
   email: string | null;
   role: "admin" | "agent";
-  agent_type: "agent" | "broker" | null;
+  agent_type: "agent" | "broker" | "auditor" | null;
 };
 
 type AgentStats = {

@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
-import { configValue, db } from "@/lib/db";
+import { db } from "@/lib/db";
 import { matchingClientsFor, staffOptions } from "@/lib/crm";
 import { requirementSummary } from "@/components/crm/ClientBadges";
 import { ShareListingActions } from "@/components/crm/MatchActions";
@@ -27,6 +27,7 @@ import {
   extendExpiry,
   markSoldByAdmin,
   moveImage,
+  reopenReview,
   restoreProperty,
   setCoverImage,
   toggleFeatured,
@@ -62,7 +63,7 @@ const MATCH_LIMIT = 10;
 const show = (v: unknown) => (v === null || v === undefined || v === "" ? "—" : Array.isArray(v) ? v.join(", ") || "—" : String(v));
 
 export default async function PropertyAdminPage({ params, searchParams }: PageProps<"/admin/properties/[id]">) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const { id } = await params;
   const { error: actionError } = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
@@ -72,7 +73,7 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
   type VisitRow = Pick<SiteVerification, "id" | "status" | "result" | "scheduled_at" | "assigned_to" | "visited_at" | "notes"> & {
     assignee_name: string | null;
   };
-  const [owner, images, builders, projects, activity, requests, visits, verifier, staff, requireVerification, matchingClients] = await Promise.all([
+  const [owner, images, builders, projects, activity, requests, visits, verifier, staff, matchingClients] = await Promise.all([
     db.one<Profile>("SELECT id, role, name, phone, wa_opt_out, created_at FROM users WHERE id = ?", [p.owner_id]),
     db.all<PropertyImage>("SELECT * FROM property_images WHERE property_id = ? ORDER BY sort_order, created_at", [id]),
     db.all<Builder>("SELECT * FROM builders ORDER BY name"),
@@ -93,16 +94,18 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
     ),
     p.verified_by ? db.one<{ name: string | null }>("SELECT name FROM users WHERE id = ?", [p.verified_by]) : Promise.resolve(null),
     staffOptions(),
-    configValue("require_site_verification"),
     // Who to tell about it: for listings in review or live.
     ["pending", "under_review", "approved"].includes(p.status) ? matchingClientsFor(p) : Promise.resolve([]),
   ]);
   const openVisit = visits.find((v) => v.status === "scheduled") ?? null;
   const pastVisits = visits.filter((v) => v.status !== "scheduled");
-  const visitStaff = staff.filter((s) => s.agent_type !== "broker").map((s) => ({ id: s.id, name: s.name, email: s.email }));
+  // Field auditors first: they do the site visits.
+  const visitStaff = staff
+    .filter((s) => s.agent_type !== "broker")
+    .sort((a, b) => Number(b.agent_type === "auditor") - Number(a.agent_type === "auditor"))
+    .map((s) => ({ id: s.id, name: s.agent_type === "auditor" ? `${s.name ?? s.email ?? "Staff"} (auditor)` : s.name, email: s.email }));
   // Default visit time: tomorrow, 11:00 India time.
   const defaultWhen = `${istInputValue(fromNow(86_400_000).toISOString()).slice(0, 10)}T11:00`;
-  const verificationRequired = requireVerification === "1";
 
   const actorIds = [...new Set(activity.map((a) => a.actor_id).filter(Boolean))] as string[];
   const actors = actorIds.length
@@ -327,13 +330,23 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
               }
               history={pastVisits.map(({ id, status, result, visited_at, assignee_name, notes }) => ({ id, status, result, visited_at, assignee_name, notes }))}
               staff={visitStaff}
-              required={verificationRequired}
+              required
               defaultWhen={defaultWhen}
             />
           )}
 
-          {inReview && (
-            <DecisionPanel id={p.id} canReject={p.status !== "rejected"} needsVerification={verificationRequired && !p.verified_at} />
+          {(p.status === "pending" || p.status === "under_review") && (
+            <DecisionPanel id={p.id} needsVerification={!p.verified_at} verifiedBySelf={p.verified_by === admin.userId} />
+          )}
+          {p.status === "rejected" && (
+            <section className="card space-y-3 p-6 text-sm">
+              <h2 className="text-xl font-extrabold tracking-tight">Rejected</h2>
+              {p.rejected_reason && <p className="rounded-2xl bg-red-50 px-3 py-2.5 text-red-900">{p.rejected_reason}</p>}
+              <p className="text-[var(--s-text-2)]">If the owner has fixed the problem, send it back to review. It still needs a verified site visit before approval.</p>
+              <form action={reopenReview.bind(null, p.id)}>
+                <button className="btn-secondary w-full">Reopen review</button>
+              </form>
+            </section>
           )}
 
           {matchingClients.length > 0 && (
@@ -386,18 +399,25 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
                     <button className="btn-secondary">Mark sold</button>
                   </form>
                 )}
-                {["approved", "expired"].includes(p.status) && (
+                {["approved", "expired", "sold_pending"].includes(p.status) && (
                   <form action={archiveProperty.bind(null, p.id)}>
                     <button title="Hide from the website; you can restore it later" className="btn-secondary">Archive</button>
                   </form>
                 )}
-                {["archived", "expired"].includes(p.status) && (
+                {(p.status === "expired" || (p.status === "archived" && p.archived_from !== "sold_pending")) && (
                   <form action={restoreProperty.bind(null, p.id)}>
-                    <button className="btn-primary">Restore to live</button>
+                    <button className="btn-primary" disabled={!p.verified_at} title={p.verified_at ? undefined : "Needs a new site verification first"}>
+                      Restore to live
+                    </button>
+                  </form>
+                )}
+                {p.status === "archived" && p.archived_from === "sold_pending" && (
+                  <form action={restoreProperty.bind(null, p.id)}>
+                    <button className="btn-secondary">Restore (awaiting sold confirmation)</button>
                   </form>
                 )}
               </div>
-              {["approved", "expired"].includes(p.status) && (
+              {(p.status === "approved" || (p.status === "expired" && p.verified_at)) && (
                 <form action={extendExpiry.bind(null, p.id)} className="flex items-end gap-2 border-t border-[var(--s-border)] pt-4">
                   <div className="flex-1">
                     <label className="label" htmlFor="days">
@@ -407,6 +427,11 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
                   </div>
                   <button className="btn-secondary">Extend</button>
                 </form>
+              )}
+              {["expired", "archived"].includes(p.status) && !p.verified_at && (
+                <p className="rounded-2xl bg-amber-50 p-4 text-amber-900">
+                  The site verification is out of date. Schedule a new visit before this listing can go live again.
+                </p>
               )}
               {p.status === "sold_pending" && (
                 <p className="rounded-2xl bg-violet-50 p-4 text-violet-800">
@@ -453,14 +478,16 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
             <ActivityList entries={activity} names={names} />
           </section>
 
-          <details className="card p-6">
-            <summary className="cursor-pointer list-none text-sm font-bold text-[var(--s-late)] [&::-webkit-details-marker]:hidden">
-              Delete this listing…
-            </summary>
-            <div className="mt-4">
-              <DeleteListingForm id={p.id} refNo={p.reference_no} />
-            </div>
-          </details>
+          {!["approved", "sold_pending", "sold"].includes(p.status) && (
+            <details className="card p-6">
+              <summary className="cursor-pointer list-none text-sm font-bold text-[var(--s-late)] [&::-webkit-details-marker]:hidden">
+                Delete this listing…
+              </summary>
+              <div className="mt-4">
+                <DeleteListingForm id={p.id} refNo={p.reference_no} />
+              </div>
+            </details>
+          )}
         </aside>
       </div>
     </div>

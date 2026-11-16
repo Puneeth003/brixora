@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Users" };
 
 const PER_PAGE = 50;
 
-type Kind = "admin" | "agent" | "broker" | "owner" | "visitor";
+type Kind = "admin" | "agent" | "auditor" | "broker" | "owner" | "visitor";
 
 type Row = {
   id: string;
@@ -38,6 +38,7 @@ const TABS = [
   { key: "all", label: "All" },
   { key: "admins", label: "Admins" },
   { key: "agents", label: "Agents" },
+  { key: "auditors", label: "Auditors" },
   { key: "brokers", label: "Brokers" },
   { key: "owners", label: "Owners" },
   { key: "visitors", label: "Visitors" },
@@ -51,6 +52,7 @@ const HAS_LISTING = "EXISTS (SELECT 1 FROM properties p WHERE p.owner_id = u.id 
 const KIND_SQL = `CASE
   WHEN u.role = 'admin' THEN 'admin'
   WHEN u.role = 'agent' AND u.agent_type = 'broker' THEN 'broker'
+  WHEN u.role = 'agent' AND u.agent_type = 'auditor' THEN 'auditor'
   WHEN u.role = 'agent' THEN 'agent'
   WHEN ${HAS_LISTING} THEN 'owner'
   ELSE 'visitor' END`;
@@ -58,7 +60,8 @@ const KIND_SQL = `CASE
 const TAB_WHERE: Record<TabKey, string | null> = {
   all: null,
   admins: "u.role = 'admin'",
-  agents: "u.role = 'agent' AND (u.agent_type IS NULL OR u.agent_type <> 'broker')",
+  agents: "u.role = 'agent' AND (u.agent_type IS NULL OR u.agent_type = 'agent')",
+  auditors: "u.role = 'agent' AND u.agent_type = 'auditor'",
   brokers: "u.role = 'agent' AND u.agent_type = 'broker'",
   owners: `u.role = 'owner' AND ${HAS_LISTING}`,
   visitors: `u.role = 'owner' AND NOT ${HAS_LISTING}`,
@@ -68,6 +71,7 @@ const TAB_WHERE: Record<TabKey, string | null> = {
 const KIND_BADGE: Record<Kind, { label: string; cls: string }> = {
   admin: { label: "Admin", cls: "bg-zinc-900 text-white" },
   agent: { label: "Agent", cls: "bg-emerald-100 text-emerald-800" },
+  auditor: { label: "Auditor", cls: "bg-teal-100 text-teal-800" },
   broker: { label: "Broker", cls: "bg-amber-100 text-amber-800" },
   owner: { label: "Owner", cls: "bg-violet-100 text-violet-800" },
   visitor: { label: "Visitor", cls: "bg-sky-100 text-sky-800" },
@@ -148,7 +152,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
     <>
       <PageHeader
         title="Users"
-        description="Every account in one place: admins, in-house agents, partner brokers, property owners and visitors."
+        description="Every account in one place: admins, in-house agents, field auditors, partner brokers, property owners and visitors."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <form className="flex gap-2">
@@ -186,7 +190,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
           </thead>
           <tbody>
             {rows.map((u) => {
-              const staff = u.kind === "admin" || u.kind === "agent" || u.kind === "broker";
+              const staff = u.kind === "admin" || u.kind === "agent" || u.kind === "auditor" || u.kind === "broker";
               const badge = KIND_BADGE[u.kind];
               const contact = staff
                 ? [u.email ?? "No login", u.work_phone ? displayPhone(u.work_phone) : null, u.company].filter(Boolean).join(" · ")

@@ -1,9 +1,11 @@
 import { checkStaff } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { isValidKey, readStoredFile } from "@/lib/storage";
 
 const TYPES: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", heic: "image/heic", heif: "image/heif" };
 
-// Private original uploads and site-visit photos, for signed-in staff only.
+// Private original uploads and site-visit photos. Keys start with the property id.
+// Admins see all of them; other staff only those of a property they were sent to visit.
 export async function GET(_req: Request, ctx: RouteContext<"/admin/originals/[...key]">) {
   const check = await checkStaff();
   if (check.status !== "ok") return new Response("Unauthorized", { status: 401 });
@@ -12,6 +14,10 @@ export async function GET(_req: Request, ctx: RouteContext<"/admin/originals/[..
   const name = key.join("/");
   const type = TYPES[name.split(".").pop() ?? ""];
   if (!isValidKey(name) || !name.includes("/") || !type) return new Response("Not found", { status: 404 });
+  if (check.role !== "admin") {
+    const assigned = await db.count("SELECT COUNT(*) FROM site_verifications WHERE property_id = ? AND assigned_to = ?", [name.split("/")[0], check.userId]);
+    if (!assigned) return new Response("Not found", { status: 404 });
+  }
 
   const data = await readStoredFile("originals", name);
   if (!data) return new Response("Not found", { status: 404 });

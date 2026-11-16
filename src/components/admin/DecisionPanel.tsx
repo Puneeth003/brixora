@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { approveProperty, rejectProperty } from "@/app/admin/actions";
 
-export function DecisionPanel({ id, canReject, needsVerification = false }: { id: string; canReject: boolean; needsVerification?: boolean }) {
+export function DecisionPanel({ id, needsVerification, verifiedBySelf }: { id: string; needsVerification: boolean; verifiedBySelf: boolean }) {
   const [approveState, approve, approving] = useActionState(approveProperty, null);
   const [rejectState, reject, rejecting] = useActionState(rejectProperty, null);
 
@@ -13,7 +13,7 @@ export function DecisionPanel({ id, canReject, needsVerification = false }: { id
         <input type="hidden" name="id" value={id} />
         <div>
           <h2 className="text-xl font-extrabold tracking-tight">Decision</h2>
-          <p className="mt-0.5 text-xs text-[var(--s-muted)]">Tick each check to approve.</p>
+          <p className="mt-0.5 text-xs text-[var(--s-muted)]">Final approval, after the auditor has verified the property on site.</p>
         </div>
         <div className="space-y-2">
           {[
@@ -35,18 +35,22 @@ export function DecisionPanel({ id, canReject, needsVerification = false }: { id
             {approveState.ok ? approveState.message : approveState.error}
           </p>
         )}
-        {needsVerification && (
+        {needsVerification ? (
           <p className="rounded-2xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900">
-            Verify on site first. Schedule a visit in On-site verification above.
+            Waiting for the site audit. Schedule a visit in On-site verification above.
           </p>
-        )}
-        <button className="btn-primary w-full py-3 text-base" disabled={approving}>
+        ) : verifiedBySelf ? (
+          <p className="rounded-2xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900">
+            You did the site audit, so another admin must give the final approval.
+          </p>
+        ) : null}
+        <button className="btn-primary w-full py-3 text-base" disabled={approving || needsVerification || verifiedBySelf}>
           {approving ? "Approving…" : "Approve & publish"}
         </button>
         <p className="text-xs text-[var(--s-muted)]">Save any edits first. Approval notifies the owner on WhatsApp.</p>
       </form>
 
-      {canReject && (
+      {(
         <form action={reject} className="space-y-3 border-t border-[var(--s-border)] pt-5">
           <input type="hidden" name="id" value={id} />
           <h3 className="text-xs font-bold tracking-wider text-[var(--s-muted)] uppercase">Reject</h3>

@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     );
     if (!rows.length) return 0;
     const ids = rows.map((r) => r.id);
-    await tx.run("UPDATE properties SET status = 'expired' WHERE id IN (?)", [ids]);
+    await tx.run("UPDATE properties SET status = 'expired', featured = 0 WHERE id IN (?)", [ids]);
     for (const id of ids) {
       await tx.insert("activity_log", { id: uuid(), entity_type: "property", entity_id: id, action: "expired", actor_type: "system" });
     }

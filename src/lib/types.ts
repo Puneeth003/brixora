@@ -41,6 +41,8 @@ export type Property = {
   id: string;
   reference_no: string;
   status: PropertyStatus;
+  /** Status before it was archived; "Put back on website" may only return it there. */
+  archived_from: Exclude<PropertyStatus, "draft" | "archived"> | null;
   listing_type: ListingType;
   property_type: PropertyType;
   title: string;
@@ -246,7 +248,7 @@ export type ActivityLog = {
 // CRM
 // ---------------------------------------------------------------------------
 
-export type AgentType = "agent" | "broker";
+export type AgentType = "agent" | "broker" | "auditor";
 
 export type Agent = {
   id: string;

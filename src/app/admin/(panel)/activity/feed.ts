@@ -269,6 +269,8 @@ const LOG_VERBS: Record<string, string> = {
   restored: "restored",
   sold: "confirmed the sale of",
   removed_from_website: "took down",
+  review_reopened: "reopened the review of",
+  verification_outdated: "made the site verification out of date for",
 };
 
 const CHANGE_LABEL: Record<string, string> = { price: "price change", details: "details change", sold: "sale confirmation" };

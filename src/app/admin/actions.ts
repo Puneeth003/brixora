@@ -11,7 +11,7 @@ import { removeFile } from "@/lib/storage";
 import { brokeragePhone, notify, retryMessage } from "@/lib/whatsapp";
 import { displayPhone } from "@/lib/format";
 import { diffFields, logActivity } from "@/lib/activity";
-import { CHANGE_TYPE_LABELS } from "@/lib/constants";
+import { CHANGE_TYPE_LABELS, PHOTO_LIMITS } from "@/lib/constants";
 import { propertyUrl } from "@/lib/site";
 import type { ActionState, ChangeRequest, Property, PropertyImage } from "@/lib/types";
 
@@ -36,6 +36,29 @@ async function expiryDays() {
 
 function daysFromNow(days: number, from = Date.now()) {
   return new Date(from + days * 86_400_000).toISOString();
+}
+
+// Changes the auditor would have to see again: a site verification no longer covers them.
+const REAUDIT_FIELDS = ["listing_type", "property_type", "locality", "city", "private_address", "bedrooms", "bathrooms", "area_sqft", "floor"] as const;
+
+/** True when these changes make the on-site verification out of date. */
+function needsReaudit(before: Property, changes: Record<string, unknown>, newPhotos = false) {
+  if (newPhotos) return true;
+  if (REAUDIT_FIELDS.some((k) => k in changes)) return true;
+  const price = (changes.price as { to?: unknown } | undefined)?.to;
+  return typeof price === "number" && before.price > 0 && Math.abs(price - before.price) / before.price > 0.2;
+}
+
+async function clearVerification(id: string, reason: string, actorId: string) {
+  const cleared = await db.update("properties", { verified_at: null, verified_by: null }, "id = ? AND verified_at IS NOT NULL", [id]);
+  if (cleared) {
+    await logActivity({ entityType: "property", entityId: id, action: "verification_outdated", actorType: "admin", actorId, diff: { reason } });
+  }
+}
+
+/** Open site visits are pointless once a listing is rejected, sold or taken down. */
+async function cancelOpenVisits(id: string) {
+  await db.update("site_verifications", { status: "cancelled" }, "property_id = ? AND status = 'scheduled'", [id]);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,8 +107,10 @@ export async function savePropertyEdits(_prev: ActionState, formData: FormData):
   }
 
   await logActivity({ entityType: "property", entityId: id, action: "edited", actorType: "admin", actorId: admin.userId, diff: changes });
+  const reaudit = needsReaudit(before, changes);
+  if (reaudit) await clearVerification(id, "Edited by admin", admin.userId);
   invalidate(before.reference_no);
-  return { ok: true, message: "Saved." };
+  return { ok: true, message: reaudit && before.verified_at ? "Saved. These changes need a new site visit before the listing shows as verified." : "Saved." };
 }
 
 const CHECKLIST = ["check_address", "check_contact", "check_photos"] as const;
@@ -99,26 +124,23 @@ export async function approveProperty(_prev: ActionState, formData: FormData): P
 
   const p = await getProperty(id);
   if (!p) return { ok: false, error: "Property not found." };
-  if (!["pending", "under_review", "rejected"].includes(p.status)) {
+  if (!["pending", "under_review"].includes(p.status)) {
     return { ok: false, error: `Can't approve a listing that is ${p.status}.` };
   }
-  if (!p.verified_at && (await configValue("require_site_verification")) === "1") {
-    return { ok: false, error: "This listing needs an on-site verification first. Schedule a visit below, or turn the rule off in Settings." };
+  // Two-step approval: the auditor verifies on site, then a different admin approves.
+  if (!p.verified_at) return { ok: false, error: "The auditor hasn't verified this property on site yet. Schedule a site visit first." };
+  if (p.verified_by === admin.userId) {
+    return { ok: false, error: "You verified this property on site, so another admin must give the final approval." };
   }
 
-  // Submission photos become public; photos from unapproved change requests stay hidden.
-  await db.run("UPDATE property_images SET approved = 1 WHERE property_id = ? AND change_request_id IS NULL", [id]);
-
-  const imgs = await db.all<{ id: string; is_cover: boolean }>(
-    "SELECT id, is_cover FROM property_images WHERE property_id = ? AND approved = 1 AND is_visible = 1 ORDER BY sort_order",
+  const visible = await db.count(
+    "SELECT COUNT(*) FROM property_images WHERE property_id = ? AND change_request_id IS NULL AND is_visible = 1",
     [id],
   );
-  if (!imgs.length) return { ok: false, error: "At least one visible photo is required." };
-  if (!imgs.some((i) => i.is_cover)) {
-    await db.update("property_images", { is_cover: true }, "id = ?", [imgs[0].id]);
-  }
+  if (visible < PHOTO_LIMITS.min) return { ok: false, error: `At least ${PHOTO_LIMITS.min} visible photos are needed to publish.` };
 
-  await db.update(
+  // Only the first click (or the first admin) gets past this point.
+  const changed = await db.update(
     "properties",
     {
       status: "approved",
@@ -126,10 +148,22 @@ export async function approveProperty(_prev: ActionState, formData: FormData): P
       expires_at: daysFromNow(await expiryDays()),
       reviewed_by: admin.userId,
       rejected_reason: null,
+      archived_from: null,
     },
-    "id = ?",
+    "id = ? AND status IN ('pending', 'under_review') AND verified_at IS NOT NULL",
     [id],
   );
+  if (!changed) return { ok: false, error: "This listing changed while you were looking at it. Reload the page." };
+
+  // Submission photos become public; photos from unapproved change requests stay hidden.
+  await db.run("UPDATE property_images SET approved = 1 WHERE property_id = ? AND change_request_id IS NULL", [id]);
+  const imgs = await db.all<{ id: string; is_cover: boolean }>(
+    "SELECT id, is_cover FROM property_images WHERE property_id = ? AND approved = 1 AND is_visible = 1 ORDER BY sort_order",
+    [id],
+  );
+  if (imgs.length && !imgs.some((i) => i.is_cover)) {
+    await db.update("property_images", { is_cover: true }, "id = ?", [imgs[0].id]);
+  }
 
   await logActivity({ entityType: "property", entityId: id, action: "approved", actorType: "admin", actorId: admin.userId });
   invalidate(p.reference_no);
@@ -147,7 +181,14 @@ export async function rejectProperty(_prev: ActionState, formData: FormData): Pr
   if (!p) return { ok: false, error: "Property not found." };
   if (!["pending", "under_review"].includes(p.status)) return { ok: false, error: `Can't reject a listing that is ${p.status}.` };
 
-  await db.update("properties", { status: "rejected", rejected_reason: reason, reviewed_by: admin.userId }, "id = ?", [id]);
+  const changed = await db.update(
+    "properties",
+    { status: "rejected", rejected_reason: reason, reviewed_by: admin.userId },
+    "id = ? AND status IN ('pending', 'under_review')",
+    [id],
+  );
+  if (!changed) return { ok: false, error: "This listing changed while you were looking at it. Reload the page." };
+  await cancelOpenVisits(id);
 
   await logActivity({ entityType: "property", entityId: id, action: "rejected", actorType: "admin", actorId: admin.userId, diff: { reason } });
   await notify(await ownerPhone(p.owner_id), "listing_rejected", [p.reference_no, reason]);
@@ -162,7 +203,10 @@ async function setStatus(id: string, action: string, update: Partial<Property>, 
   const admin = await requireAdmin();
   const p = await getProperty(id);
   if (!p || !allowedFrom.includes(p.status)) return null;
-  await db.update("properties", update, "id = ?", [id]);
+  // Featured only means something while the listing is live.
+  const next = { ...update, ...(update.status && update.status !== "approved" ? { featured: false } : {}) };
+  // Re-checks the status in the same statement, so a double click or a second admin can't apply it twice.
+  if (!(await db.update("properties", next, "id = ? AND status = ?", [id, p.status]))) return null;
   await logActivity({
     entityType: "property",
     entityId: id,
@@ -179,6 +223,8 @@ export async function toggleFeatured(id: string) {
   const admin = await requireAdmin();
   const p = await getProperty(id);
   if (!p) return;
+  // Only live listings can be featured; un-featuring always works.
+  if (!p.featured && p.status !== "approved") return;
   await db.update("properties", { featured: !p.featured }, "id = ?", [id]);
   await logActivity({
     entityType: "property",
@@ -190,13 +236,20 @@ export async function toggleFeatured(id: string) {
   invalidate(p.reference_no);
 }
 
+const ARCHIVABLE: Property["status"][] = ["approved", "expired", "sold_pending"];
+
 export async function archiveProperty(id: string) {
-  await setStatus(id, "archived", { status: "archived" }, ["approved", "expired", "rejected"]);
+  const p = await getProperty(id);
+  if (!p || !ARCHIVABLE.includes(p.status)) return;
+  if (await setStatus(id, "archived", { status: "archived", archived_from: p.status as Property["archived_from"] }, [p.status])) {
+    await cancelOpenVisits(id);
+  }
 }
 
 export async function markSoldByAdmin(id: string) {
   const p = await setStatus(id, "sold", { status: "sold", sold_at: new Date().toISOString() }, ["approved", "sold_pending", "expired"]);
   if (p) {
+    await cancelOpenVisits(id);
     await db.update(
       "change_requests",
       { status: "approved", reviewed_at: new Date() },
@@ -209,8 +262,23 @@ export async function markSoldByAdmin(id: string) {
 
 /** Takes a listing off the website without deleting it (archived; can be restored). */
 export async function removeFromWebsite(id: string) {
-  await setStatus(id, "removed_from_website", { status: "archived" }, ["approved", "expired", "sold_pending", "sold", "rejected"]);
+  const p = await getProperty(id);
+  if (!p || !ARCHIVABLE.includes(p.status)) return;
+  if (await setStatus(id, "removed_from_website", { status: "archived", archived_from: p.status as Property["archived_from"] }, [p.status])) {
+    await cancelOpenVisits(id);
+  }
   revalidatePath("/admin", "layout");
+}
+
+/** Sends a rejected listing back to review, e.g. when the owner has fixed the problem. */
+export async function reopenReview(id: string) {
+  const admin = await requireAdmin();
+  const p = await getProperty(id);
+  if (!p) return;
+  if (await db.update("properties", { status: "under_review", reviewed_by: admin.userId }, "id = ? AND status = 'rejected'", [id])) {
+    await logActivity({ entityType: "property", entityId: id, action: "review_reopened", actorType: "admin", actorId: admin.userId });
+    revalidatePath("/admin", "layout");
+  }
 }
 
 /**
@@ -224,6 +292,10 @@ export async function deletePropertyPermanently(id: string, formData: FormData) 
   if (!p) redirect("/admin/listings");
   if (String(formData.get("confirm") ?? "").trim().toUpperCase() !== p.reference_no.toUpperCase()) {
     redirect(`/admin/properties/${id}?error=${encodeURIComponent("Type the reference number exactly to delete.")}`);
+  }
+  // Live and sold listings keep their history: take them off the website instead.
+  if (["approved", "sold_pending", "sold"].includes(p.status)) {
+    redirect(`/admin/properties/${id}?error=${encodeURIComponent("Live and sold listings can't be deleted. Remove it from the website first.")}`);
   }
 
   const [images, visitPhotos] = await Promise.all([
@@ -252,16 +324,31 @@ export async function deletePropertyPermanently(id: string, formData: FormData) 
   redirect(`/admin/listings?removed=${encodeURIComponent(p.reference_no)}`);
 }
 
+/** True when an archived or expired listing may go back on the website. */
+function canGoLive(p: Property) {
+  if (!p.verified_at) return false;
+  if (p.status === "expired") return true;
+  return p.status === "archived" && (p.archived_from === "approved" || p.archived_from === "expired");
+}
+
 export async function restoreProperty(id: string) {
+  await requireAdmin();
   const p = await getProperty(id);
   if (!p) return;
-  const expired = !p.expires_at || new Date(p.expires_at).getTime() < Date.now();
-  await setStatus(
-    id,
-    "restored",
-    { status: "approved", ...(expired ? { expires_at: daysFromNow(await expiryDays()) } : {}) },
-    ["archived", "expired"],
-  );
+  if (p.status === "archived" && p.archived_from && !["approved", "expired"].includes(p.archived_from)) {
+    // Not live before archiving (e.g. awaiting sold confirmation): return it to where it was.
+    await setStatus(id, "restored", { status: p.archived_from, archived_from: null }, ["archived"]);
+  } else if (canGoLive(p)) {
+    const expired = !p.expires_at || new Date(p.expires_at).getTime() < Date.now();
+    await setStatus(
+      id,
+      "restored",
+      { status: "approved", archived_from: null, ...(expired ? { expires_at: daysFromNow(await expiryDays()) } : {}) },
+      ["archived", "expired"],
+    );
+  } else {
+    redirect(`/admin/properties/${id}?error=${encodeURIComponent("This listing needs a new site verification before it can go live again.")}`);
+  }
   revalidatePath("/admin", "layout");
 }
 
@@ -269,10 +356,13 @@ export async function extendExpiry(id: string, formData: FormData) {
   const admin = await requireAdmin();
   const days = Math.min(365, Math.max(1, Number(formData.get("days")) || 30));
   const p = await getProperty(id);
-  if (!p) return;
+  if (!p || !["approved", "expired"].includes(p.status)) return;
+  if (p.status === "expired" && !canGoLive(p)) {
+    redirect(`/admin/properties/${id}?error=${encodeURIComponent("This listing needs a new site verification before it can go live again.")}`);
+  }
   const base = p.expires_at && new Date(p.expires_at).getTime() > Date.now() ? new Date(p.expires_at).getTime() : Date.now();
   const expires_at = daysFromNow(days, base);
-  await db.update("properties", { expires_at, ...(p.status === "expired" ? { status: "approved" } : {}) }, "id = ?", [id]);
+  if (!(await db.update("properties", { expires_at, ...(p.status === "expired" ? { status: "approved" } : {}) }, "id = ? AND status = ?", [id, p.status]))) return;
   await logActivity({
     entityType: "property",
     entityId: id,
@@ -296,6 +386,29 @@ async function imageWithProperty(imageId: string) {
   return img ? { img, ref: img.reference_no } : null;
 }
 
+/** A live listing must keep at least one public photo. */
+async function isLastPublicPhoto(img: PropertyImage) {
+  if (!img.is_visible || !img.approved) return false;
+  const live = await db.one<{ status: string }>("SELECT status FROM properties WHERE id = ?", [img.property_id]);
+  if (live?.status !== "approved") return false;
+  const others = await db.count(
+    "SELECT COUNT(*) FROM property_images WHERE property_id = ? AND id <> ? AND is_visible = 1 AND approved = 1",
+    [img.property_id, img.id],
+  );
+  return others === 0;
+}
+
+const LAST_PHOTO_ERROR = "A live listing needs at least one photo. Add another photo first.";
+
+/** After the cover is hidden or deleted, the first remaining public photo takes over. */
+async function ensureCover(propertyId: string) {
+  const imgs = await db.all<{ id: string; is_cover: boolean }>(
+    "SELECT id, is_cover FROM property_images WHERE property_id = ? AND is_visible = 1 AND approved = 1 ORDER BY sort_order, created_at",
+    [propertyId],
+  );
+  if (imgs.length && !imgs.some((i) => i.is_cover)) await db.update("property_images", { is_cover: true }, "id = ?", [imgs[0].id]);
+}
+
 export async function setCoverImage(imageId: string) {
   const admin = await requireAdmin();
   const ctx = await imageWithProperty(imageId);
@@ -310,7 +423,9 @@ export async function toggleImageVisible(imageId: string) {
   const admin = await requireAdmin();
   const ctx = await imageWithProperty(imageId);
   if (!ctx) return;
-  await db.update("property_images", { is_visible: !ctx.img.is_visible }, "id = ?", [imageId]);
+  if (await isLastPublicPhoto(ctx.img)) redirect(`/admin/properties/${ctx.img.property_id}?error=${encodeURIComponent(LAST_PHOTO_ERROR)}`);
+  await db.update("property_images", { is_visible: !ctx.img.is_visible, ...(ctx.img.is_visible ? { is_cover: false } : {}) }, "id = ?", [imageId]);
+  if (ctx.img.is_visible) await ensureCover(ctx.img.property_id);
   await logActivity({
     entityType: "property",
     entityId: ctx.img.property_id,
@@ -325,8 +440,10 @@ export async function deleteImage(imageId: string) {
   const admin = await requireAdmin();
   const ctx = await imageWithProperty(imageId);
   if (!ctx) return;
+  if (await isLastPublicPhoto(ctx.img)) redirect(`/admin/properties/${ctx.img.property_id}?error=${encodeURIComponent(LAST_PHOTO_ERROR)}`);
   await db.run("DELETE FROM property_images WHERE id = ?", [imageId]);
-  await removeStoredImage(ctx.img.storage_path, ctx.img.watermarked_path);
+  if (!ctx.img.storage_path.startsWith("demo/")) await removeStoredImage(ctx.img.storage_path, ctx.img.watermarked_path);
+  await ensureCover(ctx.img.property_id);
   await logActivity({ entityType: "property", entityId: ctx.img.property_id, action: "photo_deleted", actorType: "admin", actorId: admin.userId });
   invalidate(ctx.ref);
 }
@@ -355,6 +472,8 @@ export async function uploadAdminPhoto(formData: FormData): Promise<{ ok: boolea
   if (!p) return { ok: false, error: "Property not found." };
 
   const count = await db.count("SELECT COUNT(*) FROM property_images WHERE property_id = ?", [propertyId]);
+  // After deletions COUNT(*) can repeat an existing position; go after the last one.
+  const last = await db.one<{ n: number | null }>("SELECT MAX(sort_order) AS n FROM property_images WHERE property_id = ?", [propertyId]);
   try {
     const stored = await processAndStore(file, propertyId);
     await db.insert("property_images", {
@@ -362,7 +481,7 @@ export async function uploadAdminPhoto(formData: FormData): Promise<{ ok: boolea
       property_id: propertyId,
       storage_path: stored.storagePath,
       watermarked_path: stored.watermarkedPath,
-      sort_order: count ?? 0,
+      sort_order: (last?.n ?? -1) + 1,
       is_cover: (count ?? 0) === 0,
       approved: true,
       uploaded_by: admin.userId,
@@ -389,6 +508,9 @@ export async function approveChangeRequest(_prev: ActionState, formData: FormDat
   if (!req || req.status !== "pending") return { ok: false, error: "Request not found or already reviewed." };
   const p = await getProperty(req.property_id);
   if (!p) return { ok: false, error: "Property not found." };
+  if (!["approved", "sold_pending", "expired"].includes(p.status)) {
+    return { ok: false, error: `The listing is ${p.status} now, so this request can't be applied. Reject it instead.` };
+  }
 
   const now = new Date().toISOString();
   let update: Partial<Property> = {};
@@ -405,6 +527,20 @@ export async function approveChangeRequest(_prev: ActionState, formData: FormDat
     const available = String(formData.get("available_from") ?? "");
     if (description) update.description = description;
     update.available_from = /^\d{4}-\d{2}-\d{2}$/.test(available) ? available : null;
+  } else if (req.type === "sold") {
+    update = { status: "sold", sold_at: now, featured: false };
+  }
+
+  // Claim the request: a double click or a second admin stops here.
+  const claimed = await db.update(
+    "change_requests",
+    { status: "approved", reviewed_by: admin.userId, reviewed_at: now, admin_note: null },
+    "id = ? AND status = 'pending'",
+    [req.id],
+  );
+  if (!claimed) return { ok: false, error: "This request was already reviewed." };
+
+  if (req.type === "details") {
     const hide = formData.getAll("hide_image_ids").map(String);
     const approvePhotos = formData.getAll("approve_image_ids").map(String);
     if (hide.length) {
@@ -416,21 +552,23 @@ export async function approveChangeRequest(_prev: ActionState, formData: FormDat
     // Photos from this request that weren't approved stay hidden for good.
     await db.update("property_images", { is_visible: false }, "change_request_id = ? AND approved = 0", [req.id]);
     applied = { hidden_images: hide, approved_images: approvePhotos };
-  } else if (req.type === "sold") {
-    update = { status: "sold", sold_at: now };
   }
 
   if (Object.keys(update).length) await db.update("properties", update, "id = ?", [p.id]);
-  await db.update("change_requests", { status: "approved", reviewed_by: admin.userId, reviewed_at: now, admin_note: null }, "id = ?", [req.id]);
+  if (req.type === "sold") await cancelOpenVisits(p.id);
 
+  const changes = diffFields(p as unknown as Record<string, unknown>, update as Record<string, unknown>);
   await logActivity({
     entityType: "property",
     entityId: p.id,
     action: `change_approved:${req.type}`,
     actorType: "admin",
     actorId: admin.userId,
-    diff: { request_id: req.id, ...diffFields(p as unknown as Record<string, unknown>, update as Record<string, unknown>), ...applied },
+    diff: { request_id: req.id, ...changes, ...applied },
   });
+  if (req.type !== "sold" && needsReaudit(p, changes, Boolean((applied.approved_images as string[] | undefined)?.length))) {
+    await clearVerification(p.id, `Change request approved (${CHANGE_TYPE_LABELS[req.type]})`, admin.userId);
+  }
   invalidate(p.reference_no);
 
   const phone = await ownerPhone(p.owner_id);
@@ -448,16 +586,17 @@ export async function rejectChangeRequest(_prev: ActionState, formData: FormData
   const p = await getProperty(req.property_id);
   if (!p) return { ok: false, error: "Property not found." };
 
-  await db.update(
+  const claimed = await db.update(
     "change_requests",
     { status: "rejected", reviewed_by: admin.userId, reviewed_at: new Date(), admin_note: reason },
-    "id = ?",
+    "id = ? AND status = 'pending'",
     [req.id],
   );
+  if (!claimed) return { ok: false, error: "This request was already reviewed." };
   await db.update("property_images", { is_visible: false }, "change_request_id = ? AND approved = 0", [req.id]);
 
   if (req.type === "sold" && p.status === "sold_pending") {
-    await db.update("properties", { status: "approved" }, "id = ?", [p.id]);
+    await db.update("properties", { status: "approved" }, "id = ? AND status = 'sold_pending'", [p.id]);
     invalidate(p.reference_no);
   }
 

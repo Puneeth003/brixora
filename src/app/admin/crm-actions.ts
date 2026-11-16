@@ -297,7 +297,7 @@ const agentSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email").max(254).nullable(),
   work_phone: z.string().trim().max(20).nullable(),
   role: z.enum(["agent", "admin"]),
-  agent_type: z.enum(["agent", "broker"]),
+  agent_type: z.enum(["agent", "broker", "auditor"]),
   company: z.string().trim().max(120).nullable(),
   rera_no: z.string().trim().max(80).nullable(),
   commission_pct: z.number().min(0).max(100).nullable(),

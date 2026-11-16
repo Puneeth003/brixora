@@ -31,7 +31,6 @@ export async function saveOrganization(_prev: ActionState, formData: FormData): 
   const sidebar = str(formData, "sidebar_color").toLowerCase();
   const expiryRaw = str(formData, "listing_expiry_days");
   const prefix = str(formData, "ref_prefix").toUpperCase();
-  const requireVerification = formData.get("require_site_verification") ? "1" : "0";
 
   if (!HEX.test(brand)) return { ok: false, error: "Brand colour must be a hex value like #0e5e44." };
   if (!HEX.test(sidebar)) return { ok: false, error: "Sidebar colour must be a hex value like #27292f." };
@@ -44,7 +43,6 @@ export async function saveOrganization(_prev: ActionState, formData: FormData): 
     ["sidebar_color", sidebar],
     ["listing_expiry_days", String(expiry)],
     ["ref_prefix", prefix],
-    ["require_site_verification", requireVerification],
   ];
   const before = await db.all<{ name: string; value: string }>("SELECT name, value FROM app_config WHERE name IN (?)", [values.map(([name]) => name)]);
   for (const [name, value] of values) {

@@ -51,6 +51,7 @@ export const ACTIVITY_TYPES: { value: ClientActivityType; label: string; loggabl
 export const AGENT_TYPES: { value: AgentType; label: string }[] = [
   { value: "agent", label: "In-house agent" },
   { value: "broker", label: "Partner broker" },
+  { value: "auditor", label: "Field auditor (site visits)" },
 ];
 
 export const label = <T extends string>(list: { value: T; label: string }[], v: T | null | undefined) =>

@@ -121,7 +121,7 @@ async function ProfileSection({ userId, email }: { userId: string; email: string
 
 async function OrganizationSection() {
   const rows = await db.all<{ name: string; value: string }>(
-    "SELECT name, value FROM app_config WHERE name IN ('brand_color', 'sidebar_color', 'listing_expiry_days', 'ref_prefix', 'require_site_verification')",
+    "SELECT name, value FROM app_config WHERE name IN ('brand_color', 'sidebar_color', 'listing_expiry_days', 'ref_prefix')",
   );
   const get = (name: string) => rows.find((r) => r.name === name)?.value;
   const hex = (v: string | undefined, fallback: string) => (v && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback);
@@ -140,7 +140,6 @@ async function OrganizationSection() {
           sidebarColor={hex(get("sidebar_color"), "#27292f")}
           expiryDays={Number.isInteger(expiry) && expiry >= 1 && expiry <= 365 ? expiry : 90}
           refPrefix={get("ref_prefix") ?? "BRX"}
-          requireVerification={(get("require_site_verification") ?? "1") === "1"}
         />
       </Card>
       <Card title="Website details" description="Set through environment variables (NEXT_PUBLIC_BRAND_NAME, NEXT_PUBLIC_BROKERAGE_*). Changing them needs a redeploy.">

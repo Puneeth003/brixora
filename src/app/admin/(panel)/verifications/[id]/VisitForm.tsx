@@ -142,7 +142,7 @@ export function VisitForm({
       <input type="hidden" name="accuracy" value={geo ? String(geo.accuracy) : ""} />
 
       <Step n={1} title="Location" done={!!geo}>
-        <p className="mb-3 text-sm text-[var(--s-muted)]">Record where you are, once you reach the property. Optional, but it helps.</p>
+        <p className="mb-3 text-sm text-[var(--s-muted)]">Record where you are once you reach the property. Needed to mark it verified (accurate to 200 m or better).</p>
         <button
           type="button"
           onClick={captureLocation}
@@ -263,9 +263,17 @@ export function VisitForm({
           </label>
         </div>
 
-        {result === "verified" && (!requiredDone || photoCount === 0) && (
+        {result === "verified" && (!requiredDone || photoCount === 0 || !geo || geo.accuracy > 200) && (
           <p className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            To mark verified, {[!requiredDone && "tick every required checklist item", photoCount === 0 && "add at least one photo"].filter(Boolean).join(" and ")}.
+            To mark verified,{" "}
+            {[
+              (!geo || geo.accuracy > 200) && "capture your location at the property",
+              !requiredDone && "tick every required checklist item",
+              photoCount === 0 && "add at least one photo",
+            ]
+              .filter(Boolean)
+              .join(", ")}
+            .
           </p>
         )}
 

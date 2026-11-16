@@ -33,9 +33,23 @@ export function DeleteListingForm({ id, refNo, compact = false }: { id: string; 
  * "⋯" button on a listing row. Opens a small centred panel (native popover, so the
  * scrolling table can't clip it): take it off the website, restore it, or delete it.
  */
-export function ListingRemoveMenu({ id, refNo, title, status }: { id: string; refNo: string; title: string; status: PropertyStatus }) {
-  const canRemove = ["approved", "expired", "sold_pending", "sold", "rejected"].includes(status);
-  const canRestore = status === "archived" || status === "expired";
+export function ListingRemoveMenu({
+  id,
+  refNo,
+  title,
+  status,
+  verified,
+}: {
+  id: string;
+  refNo: string;
+  title: string;
+  status: PropertyStatus;
+  /** Has a current site verification (needed to go live again). */
+  verified: boolean;
+}) {
+  const canRemove = ["approved", "expired", "sold_pending"].includes(status);
+  const canRestore = (status === "archived" || status === "expired") && verified;
+  const canDelete = !["approved", "sold_pending", "sold"].includes(status);
   const pop = `listing-menu-${id}`;
   return (
     <>
@@ -84,10 +98,16 @@ export function ListingRemoveMenu({ id, refNo, title, status }: { id: string; re
             <form action={restoreProperty.bind(null, id)}>
               <button className="w-full rounded-2xl px-3 py-3 text-left text-sm font-bold hover:bg-[var(--s-hover)]">
                 Put back on website
-                <span className="block text-xs font-normal text-[var(--s-muted)]">Live again (expiry renewed if it had passed).</span>
+                <span className="block text-xs font-normal text-[var(--s-muted)]">Back where it was before (live again if it was live).</span>
               </button>
             </form>
           )}
+          {!canRemove && !canRestore && !canDelete && (
+            <p className="px-3 py-3 text-sm text-[var(--s-muted)]">
+              {status === "sold" ? "Sold listings stay in your records." : "Nothing to do here. Open the listing for more options."}
+            </p>
+          )}
+          {canDelete && (
           <details className="rounded-2xl">
             <summary className="cursor-pointer list-none rounded-2xl px-3 py-3 text-sm font-bold text-[var(--s-late)] hover:bg-red-50 [&::-webkit-details-marker]:hidden">
               Delete permanently…
@@ -96,6 +116,7 @@ export function ListingRemoveMenu({ id, refNo, title, status }: { id: string; re
               <DeleteListingForm id={id} refNo={refNo} compact />
             </div>
           </details>
+          )}
         </div>
       </div>
     </>
