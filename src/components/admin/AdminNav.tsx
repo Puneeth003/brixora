@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { site } from "@/lib/site";
 import { NAV_ICONS } from "./NavIcons";
 
-type Counts = { submissions: number; requests: number; failed: number; followUps: number; unread: number; visits: number };
+type Counts = { submissions: number; requests: number; failed: number; followUps: number; unread: number; visits: number; enquiries: number };
 type Item = { href: string; label: string; icon: string; count?: number; tone?: "warn" | "bad" };
 type Section = { title?: string; items: Item[] };
 
@@ -35,7 +35,7 @@ function sectionsFor(role: "admin" | "agent", counts: Counts): Section[] {
         { href: "/admin/builders", label: "Builders", icon: "builders" },
       ],
     },
-    { title: "CRM", items: [...crm, { href: "/admin/enquiries", label: "Enquiries", icon: "enquiries" }] },
+    { title: "CRM", items: [...crm, { href: "/admin/enquiries", label: "Enquiries", icon: "enquiries", count: counts.enquiries, tone: "bad" }] },
     {
       title: "Team",
       items: [

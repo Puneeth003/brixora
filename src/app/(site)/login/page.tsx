@@ -14,12 +14,12 @@ export default function LoginPage({ searchParams }: PageProps<"/login">) {
       logo={false}
       title={
         <>
-          Your next home
+          List and manage
           <br />
-          starts here
+          your property
         </>
       }
-      subtitle={`Log in to follow your enquiries, saved properties and listings in ${site.defaultCity}.`}
+      subtitle={`Property owners in ${site.defaultCity}: log in with your WhatsApp number to list a property and follow it. Buyers don't need an account.`}
     >
       <Suspense fallback={<div className="h-80 animate-pulse rounded-2xl bg-black/5" />}>
         <Content searchParams={searchParams} />
@@ -32,7 +32,7 @@ const SAFE_NEXT = /^\/(manage|account|properties|post)(\/|\?|$)/;
 
 async function Content({ searchParams }: Pick<PageProps<"/login">, "searchParams">) {
   const { next } = await searchParams;
-  const target = typeof next === "string" && SAFE_NEXT.test(next) ? next : "/account";
+  const target = typeof next === "string" && SAFE_NEXT.test(next) ? next : "/manage";
   // Already signed in: go straight on.
   if (await getOwner()) redirect(target);
   return <ManageLogin next={target} />;

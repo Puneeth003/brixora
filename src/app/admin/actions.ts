@@ -643,8 +643,22 @@ export async function saveBuilder(_prev: ActionState, formData: FormData): Promi
   return { ok: true, message: "Saved." };
 }
 
-export async function deleteBuilder(id: string) {
+/** Builders and projects still used by listings can't be deleted: the listings would silently lose them. */
+async function refuseIfLinked(sql: string, values: unknown[], what: string) {
+  const linked = await db.count(sql, values);
+  if (linked) {
+    redirect(`/admin/builders?error=${encodeURIComponent(`${linked} listing${linked === 1 ? " uses" : "s use"} this ${what}. Change those listings first.`)}`);
+  }
+}
+
+export async function deleteBuilder(id: string, formData: FormData) {
   const admin = await requireAdmin();
+  if (formData.get("confirm") !== "on") return;
+  await refuseIfLinked(
+    "SELECT COUNT(*) FROM properties WHERE builder_id = ? OR project_id IN (SELECT id FROM projects WHERE builder_id = ?)",
+    [id, id],
+    "builder or one of its projects",
+  );
   // The name goes in the log: the row it would be read from is about to go.
   const builder = await db.one<{ name: string }>("SELECT name FROM builders WHERE id = ?", [id]);
   await db.run("DELETE FROM builders WHERE id = ?", [id]);
@@ -680,8 +694,10 @@ export async function saveProject(_prev: ActionState, formData: FormData): Promi
   return { ok: true, message: "Saved." };
 }
 
-export async function deleteProject(id: string) {
+export async function deleteProject(id: string, formData: FormData) {
   const admin = await requireAdmin();
+  if (formData.get("confirm") !== "on") return;
+  await refuseIfLinked("SELECT COUNT(*) FROM properties WHERE project_id = ?", [id], "project");
   const project = await db.one<{ name: string }>("SELECT name FROM projects WHERE id = ?", [id]);
   await db.run("DELETE FROM projects WHERE id = ?", [id]);
   await logActivity({ entityType: "project", entityId: id, action: "deleted", actorType: "admin", actorId: admin.userId, diff: project ? { name: project.name } : null });

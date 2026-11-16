@@ -11,8 +11,9 @@ export const metadata: Metadata = { title: "Builders & projects" };
 
 const PROJECT_STATUS = { upcoming: "Upcoming", under_construction: "Under construction", ready: "Ready to move" };
 
-export default async function BuildersPage() {
+export default async function BuildersPage({ searchParams }: PageProps<"/admin/builders">) {
   await requireAdmin();
+  const { error } = await searchParams;
   const [builders, projects, linked] = await Promise.all([
     db.all<Builder>("SELECT * FROM builders ORDER BY name"),
     db.all<Project>("SELECT * FROM projects ORDER BY name"),
@@ -44,6 +45,11 @@ export default async function BuildersPage() {
   return (
     <>
       <PageHeader title="Builders & projects" description="Link listings to a project from the property editor." />
+      {typeof error === "string" && (
+        <p role="alert" className="mb-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </p>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="space-y-4">
@@ -81,8 +87,12 @@ export default async function BuildersPage() {
               </summary>
               <div className="space-y-4 border-t border-[var(--s-border)] px-5 py-5">
                 <BuilderForm builder={builder} />
-                <form action={deleteBuilder.bind(null, builder.id)} className="border-t border-[var(--s-border)] pt-4">
-                  <button className="text-sm font-semibold text-[var(--s-late)] hover:underline">Delete builder (and its projects)</button>
+                <form action={deleteBuilder.bind(null, builder.id)} className="space-y-2 border-t border-[var(--s-border)] pt-4">
+                  <label className="flex items-center gap-2 text-sm text-[var(--s-text-2)]">
+                    <input type="checkbox" name="confirm" required />
+                    Delete {builder.name} and its {projects.filter((x) => x.builder_id === builder.id).length} projects
+                  </label>
+                  <button className="text-sm font-semibold text-[var(--s-late)] hover:underline">Delete builder</button>
                 </form>
               </div>
             </details>
@@ -127,7 +137,11 @@ export default async function BuildersPage() {
               </summary>
               <div className="space-y-4 border-t border-[var(--s-border)] px-5 py-5">
                 <ProjectForm project={project} builders={builders} />
-                <form action={deleteProject.bind(null, project.id)} className="border-t border-[var(--s-border)] pt-4">
+                <form action={deleteProject.bind(null, project.id)} className="space-y-2 border-t border-[var(--s-border)] pt-4">
+                  <label className="flex items-center gap-2 text-sm text-[var(--s-text-2)]">
+                    <input type="checkbox" name="confirm" required />
+                    Delete {project.name}
+                  </label>
                   <button className="text-sm font-semibold text-[var(--s-late)] hover:underline">Delete project</button>
                 </form>
               </div>

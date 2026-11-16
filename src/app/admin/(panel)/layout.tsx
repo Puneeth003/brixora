@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { requireStaff } from "@/lib/auth";
+import { adminMfaRequired, requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fromNow } from "@/lib/time";
 import { AdminSidebar, UserCard } from "@/components/admin/AdminNav";
@@ -24,7 +24,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
   const staff = await requireStaff();
   const isAdmin = staff.role === "admin";
   const mine = isAdmin ? "" : " AND assigned_to = ?";
-  const [submissions, requests, failed, followUps, unread, theme, visits] = await Promise.all([
+  const [submissions, requests, failed, followUps, unread, theme, visits, enquiries] = await Promise.all([
     isAdmin ? db.count("SELECT COUNT(*) FROM properties WHERE status IN ('pending', 'under_review')") : 0,
     isAdmin ? db.count("SELECT COUNT(*) FROM change_requests WHERE status = 'pending' AND submitted = 1") : 0,
     isAdmin ? db.count("SELECT COUNT(*) FROM messages WHERE status = 'failed'") : 0,
@@ -42,6 +42,10 @@ async function Shell({ children }: { children: React.ReactNode }) {
     db.all<{ name: string; value: string }>("SELECT name, value FROM app_config WHERE name IN ('brand_color', 'sidebar_color')"),
     // Open site visits (an agent's own).
     db.count(`SELECT COUNT(*) FROM site_verifications WHERE status = 'scheduled'${mine}`, isAdmin ? [] : [staff.userId]),
+    // Enquiries nobody has contacted yet (same as the Enquiries page's "New" tab).
+    isAdmin
+      ? db.count("SELECT COUNT(*) FROM enquiries e LEFT JOIN clients c ON c.id = e.client_id WHERE c.id IS NULL OR c.status = 'new'")
+      : 0,
   ]);
   const color = (name: string) => {
     const v = theme.find((t) => t.name === name)?.value;
@@ -60,7 +64,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
     <div className="admin-frame flex min-h-dvh flex-1" style={themeVars}>
       <AdminSidebar
         role={staff.role}
-        counts={{ submissions, requests, failed, followUps, unread, visits }}
+        counts={{ submissions, requests, failed, followUps, unread, visits, enquiries }}
         footer={<UserCard name={displayName} email={staff.email} role={staff.role} signOut={signOut} />}
       />
       <div className="flex min-w-0 flex-1 flex-col md:py-3 md:pr-3">
@@ -74,7 +78,15 @@ async function Shell({ children }: { children: React.ReactNode }) {
               )}
             </Link>
           </header>
-          <main className="min-w-0 flex-1 px-4 pt-3 pb-10 sm:px-8 md:pt-8">{children}</main>
+          <main className="min-w-0 flex-1 px-4 pt-3 pb-10 sm:px-8 md:pt-8">
+            {isAdmin && !adminMfaRequired && (
+              <p role="alert" className="mb-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 ring-1 ring-red-200">
+                Two-step login is switched off (ADMIN_2FA=off). Anyone with a staff password can get in. Remove ADMIN_2FA from the server&apos;s
+                environment variables to turn it back on.
+              </p>
+            )}
+            {children}
+          </main>
         </div>
       </div>
     </div>

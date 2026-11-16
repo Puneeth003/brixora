@@ -271,6 +271,13 @@ const LOG_VERBS: Record<string, string> = {
   removed_from_website: "took down",
   review_reopened: "reopened the review of",
   verification_outdated: "made the site verification out of date for",
+  withdrawn_by_owner: "withdrew",
+  document_uploaded: "added a document to",
+  document_removed: "removed a document from",
+  document_accepted: "accepted a document on",
+  document_rejected: "rejected a document on",
+  document_review_undone: "reopened a document review on",
+  document_deleted: "deleted a document from",
 };
 
 const CHANGE_LABEL: Record<string, string> = { price: "price change", details: "details change", sold: "sale confirmation" };

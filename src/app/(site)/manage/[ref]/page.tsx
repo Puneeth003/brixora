@@ -11,6 +11,7 @@ import { publicImageUrl } from "@/lib/site";
 import { PropertyStatusBadge, RequestStatusBadge } from "@/components/StatusBadge";
 import { OwnerRequests } from "@/components/public/OwnerRequests";
 import { OwnerDocuments } from "@/components/public/OwnerDocuments";
+import { withdrawListing } from "../actions";
 import type { ChangeRequest, MyProperty, PropertyImage } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Manage listing", robots: { index: false } };
@@ -35,7 +36,7 @@ async function Content({ params }: Pick<PageProps<"/manage/[ref]">, "params">) {
   );
   if (!p) notFound();
 
-  const [imgs, requests, docs] = await Promise.all([
+  const [imgs, requests, docs, visit, audit] = await Promise.all([
     db.all<Pick<PropertyImage, "id" | "watermarked_path" | "is_visible" | "approved" | "change_request_id">>(
       "SELECT id, watermarked_path, is_visible, approved, change_request_id FROM property_images WHERE property_id = ? ORDER BY sort_order",
       [p.id],
@@ -48,7 +49,21 @@ async function Content({ params }: Pick<PageProps<"/manage/[ref]">, "params">) {
       "SELECT id, doc_type, original_name, status, review_note, created_at FROM property_documents WHERE property_id = ? ORDER BY created_at",
       [p.id],
     ),
+    db.one<{ scheduled_at: string | null }>("SELECT scheduled_at FROM site_verifications WHERE property_id = ? AND status = 'scheduled' LIMIT 1", [p.id]),
+    db.one<{ verified_at: string | null }>("SELECT verified_at FROM properties WHERE id = ?", [p.id]),
   ]);
+  // Where the listing is in our process, for the owner.
+  const steps: { label: string; done: boolean; when?: string | null; note?: string }[] = [
+    { label: "Submitted", done: true, when: p.submitted_at },
+    {
+      label: "Site visit",
+      done: Boolean(audit?.verified_at) || p.status === "approved",
+      when: audit?.verified_at ?? null,
+      note: visit?.scheduled_at ? `Booked for ${formatDateTime(visit.scheduled_at)}` : audit?.verified_at ? undefined : "Our auditor will contact you to book it",
+    },
+    { label: "Final approval", done: Boolean(p.approved_at) && p.status !== "rejected", when: p.approved_at },
+    { label: "Live on the website", done: p.status === "approved", note: p.expires_at ? `Until ${formatDate(p.expires_at)}` : undefined },
+  ];
   const liveImages = imgs
     .filter((i) => !i.change_request_id || i.approved)
     .map((i) => ({ id: i.id, url: publicImageUrl(i.watermarked_path)!, is_visible: i.is_visible }));
@@ -104,6 +119,29 @@ async function Content({ params }: Pick<PageProps<"/manage/[ref]">, "params">) {
             Our team is reviewing this listing. We&apos;ll message you on WhatsApp once it&apos;s live.
           </p>
         )}
+        {!["rejected", "sold", "archived", "expired", "sold_pending"].includes(p.status) && (
+          <ol className="mt-5 grid gap-3 sm:grid-cols-4">
+            {steps.map((s, i) => (
+              <li key={s.label} className={`rounded-lg border p-3 text-sm ${s.done ? "border-brand-200 bg-brand-50" : "border-zinc-200"}`}>
+                <p className={`font-medium ${s.done ? "text-brand-800" : "text-zinc-700"}`}>
+                  {s.done ? "✓" : `${i + 1}.`} {s.label}
+                </p>
+                {s.when && <p className="text-xs text-zinc-500">{formatDate(s.when)}</p>}
+                {s.note && !s.done && <p className="text-xs text-zinc-500">{s.note}</p>}
+              </li>
+            ))}
+          </ol>
+        )}
+        {(p.status === "pending" || p.status === "under_review") && (
+          <form action={withdrawListing.bind(null, p.id)} className="mt-4">
+            <label className="flex items-center gap-2 text-sm text-zinc-600">
+              <input type="checkbox" required />
+              I no longer want to list this property
+            </label>
+            <button className="mt-2 text-sm font-medium text-red-600 hover:underline">Withdraw listing</button>
+          </form>
+        )}
+        {p.status === "archived" && <p className="mt-4 rounded-lg bg-zinc-100 p-3 text-sm text-zinc-700">This listing is withdrawn. Contact us to bring it back.</p>}
       </div>
 
       {p.status === "approved" && (

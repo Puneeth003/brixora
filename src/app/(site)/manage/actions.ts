@@ -270,6 +270,22 @@ export async function deleteOwnDocument(documentId: string): Promise<Result> {
   return { ok: true };
 }
 
+/** The owner changes their mind before it goes live. Admins can restore it to review. */
+export async function withdrawListing(propertyId: string) {
+  const owner = await getOwner();
+  if (!owner) redirect("/manage");
+  const p = await db.one<{ status: string; reference_no: string }>("SELECT status, reference_no FROM properties WHERE id = ? AND owner_id = ?", [
+    propertyId,
+    owner.id,
+  ]);
+  if (!p || (p.status !== "pending" && p.status !== "under_review")) return;
+  const changed = await db.update("properties", { status: "archived", archived_from: p.status }, "id = ? AND status = ?", [propertyId, p.status]);
+  if (!changed) return;
+  await db.update("site_verifications", { status: "cancelled" }, "property_id = ? AND status = 'scheduled'", [propertyId]);
+  await logActivity({ entityType: "property", entityId: propertyId, action: "withdrawn_by_owner", actorType: "owner", actorId: owner.id });
+  redirect(`/manage/${p.reference_no}`);
+}
+
 export async function signOut() {
   await endSession("owner");
   redirect("/manage");

@@ -22,8 +22,10 @@ export function Filters({ f, localities }: { f: ListingFilters; localities: stri
       </div>
       <div>
         <span className="label">Looking to</span>
-        <div className="grid grid-cols-2 gap-2">
+        {/* "Any" keeps both: without it, applying any filter quietly switched rentals off. */}
+        <div className="grid grid-cols-3 gap-2">
           {[
+            ["", "Any"],
             ["sale", "Buy"],
             ["rent", "Rent"],
           ].map(([value, label]) => (
@@ -35,7 +37,7 @@ export function Filters({ f, localities }: { f: ListingFilters; localities: stri
                 type="radio"
                 name="listing"
                 value={value}
-                defaultChecked={(f.listing || "sale") === value}
+                defaultChecked={(f.listing === "sale" || f.listing === "rent" ? f.listing : "") === value}
                 className="sr-only"
               />
               {label}

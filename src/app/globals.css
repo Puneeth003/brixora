@@ -34,11 +34,14 @@ html {
 }
 /* Public site on desktops and landscape tablets: everything is sized in rem, and the root
    size follows the screen, so any screen shows the same layout as a MacBook Air
-   (1440×800 viewport) — same proportions, gaps and type, only larger or smaller.
-   Whichever of width or height is tighter decides, so the hero always fits. */
+   (1440×800 viewport) — same proportions, gaps and type, only larger.
+   Whichever of width or height is tighter decides, so the hero always fits.
+   It never goes below the browser's normal size (100%): on 1024–1366 px laptops the
+   scaled size was 11–15 px, and browser zoom couldn't enlarge it (zooming shrinks the
+   viewport, which shrank the text by the same amount). */
 @media (min-width: 1024px) {
   html:has(.site-fluid) {
-    font-size: min(100vw / 90, 100svh / 50);
+    font-size: max(100%, min(100vw / 90, 100svh / 50));
   }
 }
 html:has(.admin-frame) {

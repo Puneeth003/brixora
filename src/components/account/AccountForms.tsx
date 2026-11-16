@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState, useTransition } from "react";
-import { markRepliesRead, savedState, sendMemberMessage, toggleSaved, updateMemberProfile } from "@/app/(site)/account/actions";
+import { useActionState, useEffect, useState } from "react";
+import { markRepliesRead, sendMemberMessage, updateMemberProfile } from "@/app/(site)/account/actions";
 import { REPLIES_READ_EVENT } from "@/components/public/ProfileMenu";
+import { SHORTLIST_EVENT, readShortlist, toggleShortlist } from "@/lib/shortlist";
 import type { ActionState } from "@/lib/types";
 
 function Status({ state }: { state: ActionState }) {
@@ -70,57 +71,48 @@ export function MarkRepliesRead({ unread }: { unread: number }) {
   return null;
 }
 
-/** Heart button on a listing. Guests are sent to sign in; failures say so instead of doing nothing. */
-export function SaveButton({ propertyId, refNo }: { propertyId: string; refNo: string }) {
-  const router = useRouter();
+/**
+ * Heart button on a listing. Buyers don't need an account: the shortlist is kept in
+ * their browser and shown at /shortlist.
+ */
+export function SaveButton({ refNo }: { propertyId?: string; refNo: string }) {
   const [saved, setSaved] = useState(false);
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const loginHref = `/login?next=${encodeURIComponent(`/properties/${refNo}`)}`;
 
   useEffect(() => {
-    savedState(propertyId)
-      .then((s) => {
-        setSignedIn(s.signedIn);
-        setSaved(s.saved);
-      })
-      .catch(() => setSignedIn(false));
-  }, [propertyId]);
+    const sync = () => setSaved(readShortlist().includes(refNo));
+    sync();
+    window.addEventListener(SHORTLIST_EVENT, sync);
+    window.addEventListener("storage", sync); // another tab
+    return () => {
+      window.removeEventListener(SHORTLIST_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, [refNo]);
 
   function click() {
-    setError(null);
-    // Known guest: go straight to sign-in, no round trip.
-    if (signedIn === false) {
-      router.push(loginHref);
-      return;
+    const on = toggleShortlist(refNo);
+    if (on === null) setError("This browser isn’t letting us remember your shortlist (private window?).");
+    else {
+      setError(null);
+      setSaved(on);
     }
-    start(async () => {
-      try {
-        const res = await toggleSaved(propertyId);
-        if (res.needsLogin) router.push(loginHref);
-        else if (res.ok) setSaved(Boolean(res.saved));
-        else setError("This listing can’t be saved right now.");
-      } catch {
-        setError("Couldn’t reach the server. Check your connection and try again.");
-      }
-    });
   }
 
   return (
     <div className="space-y-2">
-      <button type="button" onClick={click} disabled={pending} className="btn-secondary w-full" aria-pressed={saved}>
+      <button type="button" onClick={click} className="btn-secondary w-full" aria-pressed={saved}>
         <span aria-hidden className={saved ? "text-red-500" : "text-zinc-400"}>
           {saved ? "♥" : "♡"}
         </span>
-        {pending ? "Saving…" : saved ? "Saved to your shortlist" : "Save to shortlist"}
+        {saved ? "Saved to your shortlist" : "Save to shortlist"}
       </button>
-      {signedIn === false && !error && (
+      {saved && !error && (
         <p className="text-center text-xs text-zinc-500">
-          <Link href={loginHref} className="font-semibold text-brand-700 hover:underline">
-            Log in with WhatsApp
+          <Link href="/shortlist" className="font-semibold text-brand-700 hover:underline">
+            See your shortlist
           </Link>{" "}
-          to keep a shortlist.
+          · kept on this device
         </p>
       )}
       {error && (

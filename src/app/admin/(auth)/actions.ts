@@ -124,7 +124,12 @@ export async function requestPasswordReset(rawEmail: string): Promise<{ ok: true
     user.id,
     new Date(Date.now() - RESET_MINUTES * 60_000),
   ]);
-  if (recent >= 3) return { ok: false, error: "Too many codes requested. Please wait 10 minutes and try again." };
+  // Every answer below matches the "no such account" one, so replies can't reveal which
+  // emails are staff accounts. The reason goes to the server log.
+  if (recent >= 3) {
+    console.warn(`[reset] ${recent} codes already sent to ${email} recently; nothing sent`);
+    return { ok: true, message: GENERIC_SENT };
+  }
 
   const code = randomDigits(6);
   // A new code retires every earlier one.
@@ -139,7 +144,6 @@ export async function requestPasswordReset(rawEmail: string): Promise<{ ok: true
     await sendMail({ to: user.email, ...passwordResetEmail({ name: user.name, code, minutes: RESET_MINUTES }) });
   } catch (e) {
     console.error("[reset] email failed", e);
-    return { ok: false, error: "We couldn't send the email right now. Please try again shortly." };
   }
   return { ok: true, message: GENERIC_SENT };
 }

@@ -55,17 +55,18 @@ export default async function DashboardPage() {
   const crm = await loadCrm(staff);
   const matches = await newMatchesFor(staff, crm.now);
 
-  type QueueRow = Pick<Property, "id" | "reference_no" | "title" | "status" | "price" | "listing_type" | "locality" | "submitted_at">;
-  const [pending, live, queue] = isAdmin
+  type QueueRow = Pick<Property, "id" | "reference_no" | "title" | "status" | "price" | "listing_type" | "locality" | "submitted_at" | "verified_at">;
+  const [pending, live, queue, pipeline] = isAdmin
     ? await Promise.all([
         db.count("SELECT COUNT(*) FROM properties WHERE status IN ('pending', 'under_review')"),
         db.count("SELECT COUNT(*) FROM properties WHERE status = 'approved'"),
         db.all<QueueRow>(
-          `SELECT id, reference_no, title, status, price, listing_type, locality, submitted_at FROM properties
-            WHERE status IN ('pending', 'under_review') ORDER BY submitted_at ASC LIMIT 5`,
+          `SELECT id, reference_no, title, status, price, listing_type, locality, submitted_at, verified_at FROM properties
+            WHERE status IN ('pending', 'under_review') ORDER BY verified_at IS NULL, submitted_at ASC LIMIT 5`,
         ),
+        loadPipeline(crm.now),
       ])
-    : [0, 0, [] as QueueRow[]];
+    : [0, 0, [] as QueueRow[], null];
 
   const stats = isAdmin
     ? [
@@ -96,7 +97,9 @@ export default async function DashboardPage() {
               {summarize(
                 isAdmin
                   ? [
-                      [pending, "listing", "listings", "to review"],
+                      [pipeline?.readyToApprove ?? 0, "listing", "listings", "ready for final approval"],
+                      [pipeline?.auditNeeded ?? 0, "listing", "listings", "waiting for a site visit to be booked"],
+                      [pipeline?.newEnquiries ?? 0, "new enquiry", "new enquiries", "to call back"],
                       [crm.due, "follow-up", "follow-ups", "due today"],
                       [crm.unread, "unread message", "unread messages", ""],
                     ]
@@ -144,6 +147,8 @@ export default async function DashboardPage() {
             </Link>
           ))}
         </div>
+
+        {pipeline && <ListingPipeline p={pipeline} />}
 
         <PipelineCard byStatus={crm.byStatus} />
 
@@ -211,6 +216,9 @@ export default async function DashboardPage() {
                         </p>
                       </div>
                       <span className="text-sm font-bold whitespace-nowrap tabular-nums">{formatPrice(p.price, p.listing_type)}</span>
+                      <span className={`text-xs font-bold ${p.verified_at ? "text-emerald-700" : "text-amber-700"}`}>
+                        {p.verified_at ? "✓ Audit passed" : "Awaiting audit"}
+                      </span>
                       <PropertyStatusBadge status={p.status} />
                     </Link>
                   </li>
@@ -269,6 +277,64 @@ export default async function DashboardPage() {
         </ActivitySection>
       </aside>
     </div>
+  );
+}
+
+/** Admin work queues for the listing process: audit → final approval → live → expiry. */
+async function loadPipeline(now: number) {
+  const inReview = "p.status IN ('pending', 'under_review')";
+  const hadIssues = "EXISTS (SELECT 1 FROM site_verifications v WHERE v.property_id = p.id AND v.status = 'completed' AND v.result = 'issues')";
+  const [auditNeeded, visitsBooked, visitsOverdue, readyToApprove, auditIssues, docsToCheck, requests, newEnquiries, expiring, reaudit] = await Promise.all([
+    db.count(
+      `SELECT COUNT(*) FROM properties p WHERE ${inReview} AND p.verified_at IS NULL AND NOT ${hadIssues}
+          AND NOT EXISTS (SELECT 1 FROM site_verifications v WHERE v.property_id = p.id AND v.status = 'scheduled')`,
+    ),
+    db.count("SELECT COUNT(*) FROM site_verifications WHERE status = 'scheduled'"),
+    db.count("SELECT COUNT(*) FROM site_verifications WHERE status = 'scheduled' AND scheduled_at < ?", [new Date(now)]),
+    db.count(`SELECT COUNT(*) FROM properties p WHERE ${inReview} AND p.verified_at IS NOT NULL`),
+    db.count(`SELECT COUNT(*) FROM properties p WHERE ${inReview} AND p.verified_at IS NULL AND ${hadIssues}`),
+    db.count("SELECT COUNT(*) FROM property_documents d JOIN properties p ON p.id = d.property_id WHERE d.status = 'pending' AND p.status <> 'draft'"),
+    db.count("SELECT COUNT(*) FROM change_requests WHERE status = 'pending' AND submitted = 1"),
+    // Same as the Enquiries page's "New" tab.
+    db.count("SELECT COUNT(*) FROM enquiries e LEFT JOIN clients c ON c.id = e.client_id WHERE c.id IS NULL OR c.status = 'new'"),
+    db.count("SELECT COUNT(*) FROM properties WHERE status = 'approved' AND expires_at <= ?", [new Date(now + 7 * 86_400_000)]),
+    db.count("SELECT COUNT(*) FROM properties WHERE status = 'approved' AND verified_at IS NULL"),
+  ]);
+  return { auditNeeded, visitsBooked, visitsOverdue, readyToApprove, auditIssues, docsToCheck, requests, newEnquiries, expiring, reaudit };
+}
+
+function ListingPipeline({ p }: { p: Awaited<ReturnType<typeof loadPipeline>> }) {
+  const tiles: { label: string; value: number; href: string; hint: string; tone?: "warn" | "bad" | "good" }[] = [
+    { label: "Book a site visit", value: p.auditNeeded, href: "/admin/submissions?tab=audit", hint: "New submissions with no visit yet", tone: "warn" },
+    {
+      label: "Site visits booked",
+      value: p.visitsBooked,
+      href: "/admin/verifications",
+      hint: p.visitsOverdue ? `${p.visitsOverdue} overdue` : "Waiting for the auditor",
+      tone: p.visitsOverdue ? "bad" : undefined,
+    },
+    { label: "Ready for final approval", value: p.readyToApprove, href: "/admin/submissions?tab=approval", hint: "Audit passed", tone: "good" },
+    { label: "Audit found issues", value: p.auditIssues, href: "/admin/submissions?tab=issues", hint: "Follow up with the owner", tone: "bad" },
+    { label: "Documents to check", value: p.docsToCheck, href: "/admin/submissions?tab=audit", hint: "Uploaded by owners", tone: "warn" },
+    { label: "Change requests", value: p.requests, href: "/admin/requests", hint: "From owners of live listings", tone: "warn" },
+    { label: "New enquiries", value: p.newEnquiries, href: "/admin/enquiries", hint: "Not contacted yet", tone: "bad" },
+    { label: "Expiring in 7 days", value: p.expiring, href: "/admin/listings?tab=expiring", hint: "Extend or let them lapse", tone: "warn" },
+    { label: "Live, needs re-audit", value: p.reaudit, href: "/admin/listings?tab=reaudit", hint: "Changed since the site visit", tone: "warn" },
+  ];
+  const toneCls = { warn: "text-amber-700", bad: "text-[var(--s-late)]", good: "text-emerald-700" } as const;
+  return (
+    <section className="card p-6">
+      <h2 className="mb-4 text-lg font-extrabold tracking-tight">Listing pipeline</h2>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {tiles.map((t) => (
+          <Link key={t.label} href={t.href} className="rounded-2xl border border-[var(--s-border)] p-3.5 transition hover:bg-[var(--s-hover)]">
+            <span className={`block text-2xl leading-tight font-extrabold tabular-nums ${t.value && t.tone ? toneCls[t.tone] : ""}`}>{t.value}</span>
+            <span className="block text-sm font-bold">{t.label}</span>
+            <span className="block truncate text-xs text-[var(--s-muted)]">{t.hint}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -139,3 +139,34 @@ export function StatCard({ label, value, href, tone = "default" }: { label: stri
     </div>
   );
 }
+
+/** A page number from the query string: whole, at least 1, and not absurdly large. */
+export function pageFrom(v: string | string[] | undefined) {
+  const n = typeof v === "string" && /^\d{1,5}$/.test(v) ? Number(v) : 1;
+  return n > 0 ? n : 1;
+}
+
+/** "41–60 of 213" with Previous / Next links. Renders nothing for a single page. */
+export function Pagination({ page, perPage, total, href }: { page: number; perPage: number; total: number; href: (page: number) => string }) {
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  if (pages <= 1) return null;
+  return (
+    <nav className="mt-6 flex items-center justify-between text-sm" aria-label="Pagination">
+      <span style={{ color: "var(--s-muted)" }}>
+        {Math.min((page - 1) * perPage + 1, total)}–{Math.min(page * perPage, total)} of {total}
+      </span>
+      <span className="flex gap-2">
+        {page > 1 && (
+          <Link href={href(Math.min(page - 1, pages))} className="btn-secondary px-3 py-1.5">
+            Previous
+          </Link>
+        )}
+        {page < pages && (
+          <Link href={href(page + 1)} className="btn-secondary px-3 py-1.5">
+            Next
+          </Link>
+        )}
+      </span>
+    </nav>
+  );
+}

@@ -12,7 +12,7 @@ export const ACCOUNT_LINKS = [
   { href: "/account", label: "My account" },
   { href: "/account/enquiries", label: "My enquiries" },
   { href: "/manage", label: "My listings" },
-  { href: "/account/saved", label: "Saved properties" },
+  { href: "/shortlist", label: "Shortlist" },
 ];
 
 /** "/account" only matches itself; the others match their section. */
@@ -91,9 +91,10 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
 
   if (!user) {
     return (
-      <Link href="/login" className="btn-ghost hidden font-semibold sm:inline-flex lg:text-base">
+      // Only owners have accounts; buyers just enquire.
+      <Link href="/manage" className="btn-ghost hidden font-semibold sm:inline-flex lg:text-base">
         <UserIcon />
-        Sign in
+        Owner login
       </Link>
     );
   }

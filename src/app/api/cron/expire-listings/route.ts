@@ -1,10 +1,13 @@
 import { revalidateTag } from "next/cache";
 import { db, transaction, uuid } from "@/lib/db";
 import { safeEqual } from "@/lib/crypto";
+import { removeStoredImage } from "@/lib/images";
+import { removeFile } from "@/lib/storage";
 
 // Daily housekeeping, called by a Hostinger cron job (or any external scheduler):
 //   curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://<your domain>/api/cron/expire-listings
-// Expires approved listings past expires_at and clears dead sessions / login codes.
+// Expires approved listings past expires_at, clears dead sessions / login codes, and
+// removes abandoned drafts and unsubmitted change requests (with their files).
 // Public pages already hide expired listings via the public_properties view, so a
 // missed run is harmless.
 
@@ -30,7 +33,39 @@ export async function GET(request: Request) {
   await db.run("DELETE FROM sessions WHERE expires_at < UTC_TIMESTAMP(3)");
   await db.run("DELETE FROM otp_codes WHERE created_at < ?", [day]);
   await db.run("DELETE FROM auth_attempts WHERE created_at < ?", [new Date(Date.now() - 30 * 86_400_000)]);
+  await db.run("DELETE FROM password_resets WHERE expires_at < ?", [day]);
+
+  // Abandoned submissions: drafts never finished within 7 days, with their files.
+  const week = new Date(Date.now() - 7 * 86_400_000);
+  const drafts = await db.all<{ id: string }>("SELECT id FROM properties WHERE status = 'draft' AND created_at < ? LIMIT 200", [week]);
+  if (drafts.length) {
+    const ids = drafts.map((d) => d.id);
+    const [imgs, docs] = await Promise.all([
+      db.all<{ storage_path: string; watermarked_path: string }>("SELECT storage_path, watermarked_path FROM property_images WHERE property_id IN (?)", [ids]),
+      db.all<{ storage_path: string }>("SELECT storage_path FROM property_documents WHERE property_id IN (?)", [ids]),
+    ]);
+    await db.run("DELETE FROM properties WHERE id IN (?) AND status = 'draft'", [ids]);
+    await Promise.all([
+      ...imgs.filter((i) => !i.storage_path.startsWith("demo/")).map((i) => removeStoredImage(i.storage_path, i.watermarked_path)),
+      ...docs.map((d) => removeFile("documents", d.storage_path)),
+    ]);
+  }
+
+  // Change requests started but never submitted (the owner left mid-upload), with their photos.
+  const stale = await db.all<{ id: string }>("SELECT id FROM change_requests WHERE submitted = 0 AND requested_at < ? LIMIT 200", [new Date(Date.now() - 2 * 86_400_000)]);
+  if (stale.length) {
+    const ids = stale.map((r) => r.id);
+    const imgs = await db.all<{ storage_path: string; watermarked_path: string }>(
+      "SELECT storage_path, watermarked_path FROM property_images WHERE change_request_id IN (?) AND approved = 0",
+      [ids],
+    );
+    await db.run("DELETE FROM property_images WHERE change_request_id IN (?) AND approved = 0", [ids]);
+    await db.run("DELETE FROM change_requests WHERE id IN (?) AND submitted = 0", [ids]);
+    await Promise.all(imgs.map((i) => removeStoredImage(i.storage_path, i.watermarked_path)));
+  }
+
+  await db.run("INSERT INTO app_config (name, value) VALUES ('cron_last_run', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [new Date().toISOString()]);
 
   if (expired) revalidateTag("listings", "max");
-  return Response.json({ ok: true, expired });
+  return Response.json({ ok: true, expired, draftsRemoved: drafts.length, staleRequestsRemoved: stale.length });
 }

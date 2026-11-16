@@ -120,7 +120,8 @@ export async function getPublicListings(f: ListingFilters) {
   cacheLife("minutes");
   cacheTag("listings");
 
-  const page = Math.max(1, Number(f.page) || 1);
+  // Whole pages only, and capped: "1.5" or "999999999" in the URL must not reach the query.
+  const page = Math.min(1000, Math.max(1, Math.floor(Number(f.page)) || 1));
   if (!dbConfigured) return demoListings(f, page);
 
   const where: string[] = [];
