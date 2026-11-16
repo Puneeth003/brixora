@@ -94,14 +94,31 @@ async function Results({ searchParams }: Pick<PageProps<"/properties">, "searchP
         ) : (
           <div className="card p-10 text-center">
             <p className="font-medium">No listings match these filters.</p>
-            <p className="mt-1 text-sm text-zinc-500">Try widening your budget or choosing another locality.</p>
-            <Link href="/properties" className="btn-secondary mt-4">
-              Clear filters
-            </Link>
+            <p className="mt-1 text-sm text-zinc-500">Try widening your budget or choosing another locality, or let us look for you.</p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <Link href="/properties" className="btn-secondary">
+                Clear filters
+              </Link>
+              <Link href="/requirements" className="btn-primary">
+                Tell us what you need
+              </Link>
+            </div>
           </div>
         )}
 
         <Pagination page={page} pages={pages} basePath="/properties" params={f} />
+
+        {items.length > 0 && (
+          <div className="card mt-8 flex flex-wrap items-center justify-between gap-3 p-5">
+            <div>
+              <p className="font-semibold text-ink">Can&apos;t find what you&apos;re looking for?</p>
+              <p className="text-sm text-zinc-500">Tell us what you need and our team will find it and call you.</p>
+            </div>
+            <Link href="/requirements" className="btn-secondary">
+              Tell us what you need
+            </Link>
+          </div>
+        )}
 
         <RecentlyViewed className="mt-12 border-t border-zinc-200 pt-8" />
       </section>

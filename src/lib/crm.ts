@@ -94,6 +94,70 @@ export async function recordEnquiryInCrm(e: {
   }
 }
 
+/**
+ * A requirement posted from the public site → CRM. A new number becomes a client with the
+ * requirement filled in, so matching listings show at once. For a number already on file
+ * only empty fields are filled: what staff recorded is never overwritten from a public
+ * form. Either way the requirement goes on the timeline, and a closed client is reopened.
+ */
+export async function recordRequirementInCrm(e: {
+  name: string;
+  phone: string;
+  listingType: ListingType;
+  propertyTypes: string[];
+  localities: string[];
+  bedrooms: number | null;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  summary: string;
+}) {
+  const wanted = {
+    listing_type: e.listingType,
+    property_types: e.propertyTypes,
+    localities: e.localities.join(", ").slice(0, 255) || null,
+    bedrooms: e.bedrooms,
+    budget_min: e.budgetMin,
+    budget_max: e.budgetMax,
+  };
+  const existing = await db.one<Client>("SELECT * FROM clients WHERE phone = ?", [e.phone]);
+  let clientId = existing?.id;
+  if (!existing) {
+    clientId = uuid();
+    await db.insert("clients", {
+      id: clientId,
+      name: e.name,
+      phone: e.phone,
+      type: e.listingType === "rent" ? "tenant" : "buyer",
+      status: "new",
+      source: "website",
+      ...wanted,
+      last_contact_at: new Date(),
+    });
+  } else {
+    const fill: Record<string, unknown> = {};
+    if (!existing.listing_type) fill.listing_type = wanted.listing_type;
+    if (!existing.property_types?.length && wanted.property_types.length) fill.property_types = wanted.property_types;
+    if (!existing.localities && wanted.localities) fill.localities = wanted.localities;
+    if (!existing.bedrooms && wanted.bedrooms) fill.bedrooms = wanted.bedrooms;
+    if (!existing.budget_min && !existing.budget_max) {
+      if (wanted.budget_min) fill.budget_min = wanted.budget_min;
+      if (wanted.budget_max) fill.budget_max = wanted.budget_max;
+    }
+    await db.update(
+      "clients",
+      {
+        ...fill,
+        last_contact_at: new Date(),
+        ...(existing.status === "won" || existing.status === "lost" ? { status: "new", lost_reason: null } : {}),
+      },
+      "id = ?",
+      [existing.id],
+    );
+  }
+  await logClientActivity({ clientId: clientId!, type: "enquiry", body: e.summary });
+  return clientId!;
+}
+
 export type MatchRow = {
   id: string;
   reference_no: string;

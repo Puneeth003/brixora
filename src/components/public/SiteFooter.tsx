@@ -36,6 +36,11 @@ export function SiteFooter() {
               </Link>
             </li>
             <li>
+              <Link href="/requirements" className={linkCls}>
+                Tell us what you need
+              </Link>
+            </li>
+            <li>
               <Link href="/post" className={linkCls}>
                 Post your property
               </Link>
