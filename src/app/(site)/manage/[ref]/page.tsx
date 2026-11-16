@@ -10,6 +10,7 @@ import { CHANGE_TYPE_LABELS } from "@/lib/constants";
 import { publicImageUrl } from "@/lib/site";
 import { PropertyStatusBadge, RequestStatusBadge } from "@/components/StatusBadge";
 import { OwnerRequests } from "@/components/public/OwnerRequests";
+import { OwnerDocuments } from "@/components/public/OwnerDocuments";
 import type { ChangeRequest, MyProperty, PropertyImage } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Manage listing", robots: { index: false } };
@@ -34,13 +35,17 @@ async function Content({ params }: Pick<PageProps<"/manage/[ref]">, "params">) {
   );
   if (!p) notFound();
 
-  const [imgs, requests] = await Promise.all([
+  const [imgs, requests, docs] = await Promise.all([
     db.all<Pick<PropertyImage, "id" | "watermarked_path" | "is_visible" | "approved" | "change_request_id">>(
       "SELECT id, watermarked_path, is_visible, approved, change_request_id FROM property_images WHERE property_id = ? ORDER BY sort_order",
       [p.id],
     ),
     db.all<ChangeRequest>(
       "SELECT id, property_id, type, proposed, status, requested_at, submitted, reviewed_at, admin_note, NULL AS reviewed_by FROM change_requests WHERE property_id = ? AND submitted = 1 ORDER BY requested_at DESC",
+      [p.id],
+    ),
+    db.all<{ id: string; doc_type: string; original_name: string | null; status: "pending" | "accepted" | "rejected"; review_note: string | null; created_at: string }>(
+      "SELECT id, doc_type, original_name, status, review_note, created_at FROM property_documents WHERE property_id = ? ORDER BY created_at",
       [p.id],
     ),
   ]);
@@ -115,6 +120,12 @@ async function Content({ params }: Pick<PageProps<"/manage/[ref]">, "params">) {
           blocked={blocked}
         />
       )}
+
+      <OwnerDocuments
+        propertyId={p.id}
+        docs={docs}
+        canAdd={["pending", "under_review", "approved", "rejected", "expired"].includes(p.status)}
+      />
 
       <section>
         <h2 className="mb-3 font-semibold">Request history</h2>

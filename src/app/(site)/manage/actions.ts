@@ -6,9 +6,11 @@ import { z } from "zod";
 import { endSession, getOwner } from "@/lib/auth";
 import { db, uuid } from "@/lib/db";
 import { ImageError, processAndStore } from "@/lib/images";
+import { DocumentError, storeDocument } from "@/lib/documents";
+import { removeFile } from "@/lib/storage";
 import { notify } from "@/lib/whatsapp";
 import { logActivity } from "@/lib/activity";
-import { CHANGE_TYPE_LABELS, PHOTO_LIMITS } from "@/lib/constants";
+import { CHANGE_TYPE_LABELS, DOCUMENT_LIMITS, DOCUMENT_TYPES, PHOTO_LIMITS } from "@/lib/constants";
 import type { ActionState, ChangeType } from "@/lib/types";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -137,8 +139,12 @@ export async function uploadChangePhoto(formData: FormData): Promise<Result> {
   const file = formData.get("file");
   if (!(file instanceof File) || !file.size) return { ok: false, error: "No photo received." };
 
-  const count = await db.count("SELECT COUNT(*) FROM property_images WHERE property_id = ?", [ctx.req.property_id]);
-  if (count >= PHOTO_LIMITS.max + 10) return { ok: false, error: "Too many photos on this listing." };
+  // Photos on the listing now plus this request's; discarded ones from old requests don't count.
+  const count = await db.count(
+    "SELECT COUNT(*) FROM property_images WHERE property_id = ? AND (is_visible = 1 OR change_request_id = ?)",
+    [ctx.req.property_id, ctx.req.id],
+  );
+  if (count >= PHOTO_LIMITS.max + 10) return { ok: false, error: "Too many photos on this listing. Ask us to hide some old ones first." };
 
   try {
     const stored = await processAndStore(file, ctx.req.property_id);
@@ -201,6 +207,67 @@ export async function requestSold(_prev: ActionState, formData: FormData): Promi
   });
   await notify(ctx.owner.phone, "change_received", [ctx.property.reference_no, CHANGE_TYPE_LABELS.sold]);
   return { ok: true, message: "Thanks! The listing is hidden now. We'll confirm the sale on WhatsApp." };
+}
+
+// ---------------------------------------------------------------------------
+// Ownership documents (optional; checked by the auditor)
+// ---------------------------------------------------------------------------
+
+/** Listings an owner can still add documents to. */
+const DOC_STATUSES = ["pending", "under_review", "approved", "rejected", "expired"];
+
+export async function uploadListingDocument(formData: FormData): Promise<Result> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false, error: "Your session expired. Please sign in again." };
+
+  const propertyId = String(formData.get("propertyId") ?? "");
+  const docType = String(formData.get("docType") ?? "");
+  const file = formData.get("file");
+  if (!DOCUMENT_TYPES.some((t) => t.value === docType)) return { ok: false, error: "Choose what kind of document this is." };
+  if (!(file instanceof File) || !file.size) return { ok: false, error: "No document received." };
+
+  const property = await db.one<{ status: string; owner_id: string }>("SELECT status, owner_id FROM properties WHERE id = ?", [propertyId]);
+  if (!property || property.owner_id !== owner.id) return { ok: false, error: "Listing not found." };
+  if (!DOC_STATUSES.includes(property.status)) return { ok: false, error: "Documents can't be added to this listing any more." };
+  const count = await db.count("SELECT COUNT(*) FROM property_documents WHERE property_id = ?", [propertyId]);
+  if (count >= DOCUMENT_LIMITS.max) return { ok: false, error: `Up to ${DOCUMENT_LIMITS.max} documents per listing.` };
+
+  try {
+    const stored = await storeDocument(file, propertyId);
+    const id = uuid();
+    await db.insert("property_documents", {
+      id,
+      property_id: propertyId,
+      doc_type: docType,
+      storage_path: stored.storagePath,
+      original_name: stored.originalName,
+      mime_type: stored.mimeType,
+      size_bytes: stored.sizeBytes,
+      uploaded_by: owner.id,
+    });
+    await logActivity({ entityType: "property", entityId: propertyId, action: "document_uploaded", actorType: "owner", actorId: owner.id, diff: { doc_type: docType } });
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof DocumentError) return { ok: false, error: e.message };
+    console.error("[manage] document upload failed", e);
+    return { ok: false, error: "The document failed to upload. Please try again." };
+  }
+}
+
+/** An owner can withdraw a document until our team has reviewed it. */
+export async function deleteOwnDocument(documentId: string): Promise<Result> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false, error: "Your session expired. Please sign in again." };
+  const doc = await db.one<{ id: string; property_id: string; storage_path: string; status: string; owner_id: string }>(
+    "SELECT d.id, d.property_id, d.storage_path, d.status, p.owner_id FROM property_documents d JOIN properties p ON p.id = d.property_id WHERE d.id = ?",
+    [documentId],
+  );
+  if (!doc || doc.owner_id !== owner.id) return { ok: false, error: "Document not found." };
+  if (doc.status !== "pending") return { ok: false, error: "This document has already been reviewed. Contact us to remove it." };
+  await db.run("DELETE FROM property_documents WHERE id = ? AND status = 'pending'", [doc.id]);
+  await removeFile("documents", doc.storage_path);
+  await logActivity({ entityType: "property", entityId: doc.property_id, action: "document_removed", actorType: "owner", actorId: owner.id });
+  return { ok: true };
 }
 
 export async function signOut() {

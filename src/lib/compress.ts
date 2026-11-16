@@ -2,6 +2,7 @@
 // still does the real resize + watermark with sharp.
 
 const MAX_EDGE = 2400;
+// Matches PHOTO_LIMITS.maxBytes (kept separate: this file is client-only).
 const MAX_UNCOMPRESSED = 7 * 1024 * 1024;
 
 export async function compressImage(file: File): Promise<File> {
@@ -20,7 +21,11 @@ export async function compressImage(file: File): Promise<File> {
     if (!blob) throw new Error("encode failed");
     return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
   } catch {
-    // Browser can't decode it (e.g. HEIC on Chrome): send as-is if small enough.
+    // The server can't read iPhone HEIC photos either, so say so now instead of failing later.
+    if (/hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name)) {
+      throw new Error(`${file.name} is an iPhone HEIC photo this browser can't convert. Upload it from the iPhone itself, or save it as JPG first.`);
+    }
+    // Browser can't decode it for another reason: send as-is if small enough.
     if (file.size <= MAX_UNCOMPRESSED) return file;
     throw new Error(`${file.name} is too large. Please choose a JPG or PNG photo.`);
   }

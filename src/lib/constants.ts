@@ -1,4 +1,4 @@
-import type { Furnishing, ListingType, PropertyStatus, PropertyType } from "./types";
+import type { DocumentType, Furnishing, ListingType, PropertyStatus, PropertyType } from "./types";
 
 export const LISTING_TYPES: { value: ListingType; label: string }[] = [
   { value: "sale", label: "Buy" },
@@ -76,7 +76,31 @@ export const CHANGE_TYPE_LABELS = {
   sold: "Mark as sold",
 } as const;
 
-export const PHOTO_LIMITS = { min: 3, max: 15, maxBytes: 15 * 1024 * 1024 };
+// maxBytes stays under the 8 MB server-action body limit (next.config.ts). Photos are
+// shrunk in the browser first, so this only bites when that isn't possible.
+export const PHOTO_LIMITS = { min: 3, max: 15, maxBytes: 7 * 1024 * 1024 };
+
+// Ownership documents an owner can attach (optional). PDF or photo, checked by the auditor.
+export const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
+  { value: "sale_deed", label: "Sale deed" },
+  { value: "khata", label: "Khata certificate / extract" },
+  { value: "rtc", label: "RTC (Pahani)" },
+  { value: "encumbrance", label: "Encumbrance certificate (EC)" },
+  { value: "tax_receipt", label: "Property tax receipt" },
+  { value: "rera", label: "RERA certificate" },
+  { value: "rental_agreement", label: "Rental agreement / authority letter" },
+  { value: "id_proof", label: "Owner ID proof" },
+  { value: "other", label: "Other document" },
+];
+
+export const DOCUMENT_LIMITS = { max: 10, maxBytes: 7 * 1024 * 1024 };
+
+/** Wording the owner agrees to on submission; bump the version when it changes. */
+export const OWNER_CONSENT_VERSION = "v1";
+
+export function documentTypeLabel(value: string) {
+  return DOCUMENT_TYPES.find((t) => t.value === value)?.label ?? value;
+}
 
 export const PAGE_SIZE = 12;
 

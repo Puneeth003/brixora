@@ -32,7 +32,7 @@ export class ImageError extends Error {}
  */
 export async function processAndStore(file: File, propertyId: string) {
   if (!ACCEPTED.includes(file.type)) throw new ImageError("Please upload JPG, PNG, WebP or HEIC photos.");
-  if (file.size > PHOTO_LIMITS.maxBytes) throw new ImageError("Each photo must be under 15 MB.");
+  if (file.size > PHOTO_LIMITS.maxBytes) throw new ImageError(`Each photo must be under ${PHOTO_LIMITS.maxBytes / 1024 / 1024} MB.`);
 
   const input = Buffer.from(await file.arrayBuffer());
 

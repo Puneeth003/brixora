@@ -282,8 +282,8 @@ export async function reopenReview(id: string) {
 }
 
 /**
- * Deletes a listing and everything attached to it (photos, change requests, site
- * visits, shortlists). Enquiries and CRM clients are kept, without the listing link.
+ * Deletes a listing and everything attached to it (photos, documents, change requests,
+ * site visits, shortlists). Enquiries and CRM clients are kept, without the listing link.
  * The form must repeat the reference number as confirmation.
  */
 export async function deletePropertyPermanently(id: string, formData: FormData) {
@@ -298,18 +298,20 @@ export async function deletePropertyPermanently(id: string, formData: FormData) 
     redirect(`/admin/properties/${id}?error=${encodeURIComponent("Live and sold listings can't be deleted. Remove it from the website first.")}`);
   }
 
-  const [images, visitPhotos] = await Promise.all([
+  const [images, visitPhotos, documents] = await Promise.all([
     db.all<{ storage_path: string; watermarked_path: string }>("SELECT storage_path, watermarked_path FROM property_images WHERE property_id = ?", [id]),
     db.all<{ storage_path: string }>(
       "SELECT ph.storage_path FROM site_verification_photos ph JOIN site_verifications v ON v.id = ph.verification_id WHERE v.property_id = ?",
       [id],
     ),
+    db.all<{ storage_path: string }>("SELECT storage_path FROM property_documents WHERE property_id = ?", [id]),
   ]);
   await db.run("DELETE FROM properties WHERE id = ?", [id]);
   // Files last: the rows are gone even if a file is already missing.
   await Promise.all([
     ...images.filter((i) => !i.storage_path.startsWith("demo/")).map((i) => removeStoredImage(i.storage_path, i.watermarked_path)),
     ...visitPhotos.map((ph) => removeFile("originals", ph.storage_path)),
+    ...documents.map((d) => removeFile("documents", d.storage_path)),
   ]);
   await logActivity({
     entityType: "property",

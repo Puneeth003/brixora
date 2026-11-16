@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeVerification, uploadVerificationPhoto } from "@/app/admin/verification-actions";
 import { compressImage } from "@/lib/compress";
+import { PIN_MISMATCH_M, distanceMetres } from "@/lib/geo";
 
 type Item = { key: string; label: string; required: boolean };
 type Geo = { lat: number; lng: number; accuracy: number };
@@ -33,11 +34,14 @@ export function VisitForm({
   visitId,
   checklist,
   photoCount,
+  pin,
   children,
 }: {
   visitId: string;
   checklist: Item[];
   photoCount: number;
+  /** The owner's map pin, to compare with where the auditor is. */
+  pin: { lat: number; lng: number } | null;
   /** Server-rendered thumbnails of photos already uploaded. */
   children?: React.ReactNode;
 }) {
@@ -163,6 +167,17 @@ export function VisitForm({
             <p className={geo.accuracy > 100 ? "text-amber-700" : "text-[var(--s-text-2)]"}>
               Accurate to about {geo.accuracy} m{geo.accuracy > 100 && " — try again outdoors for a better fix"}
             </p>
+            {pin &&
+              (() => {
+                const m = distanceMetres(pin, { lat: geo.lat, lng: geo.lng });
+                return (
+                  <p className={`mt-1 font-semibold ${m > PIN_MISMATCH_M ? "text-[var(--s-late)]" : "text-emerald-700"}`}>
+                    {m > PIN_MISMATCH_M
+                      ? `${m.toLocaleString("en-IN")} m from the owner's pin. Are you at the right property? Note it if the pin is wrong.`
+                      : `${m} m from the owner's pin ✓`}
+                  </p>
+                );
+              })()}
           </div>
         )}
         {geoNote && <p className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{geoNote}</p>}

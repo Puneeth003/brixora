@@ -78,7 +78,8 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
               onChange={(e) => setPhone(e.target.value)}
               inputMode="numeric"
               autoComplete="tel-national"
-              maxLength={12}
+              // Room for a pasted "+91 98765 43210"; the server keeps only the digits.
+              maxLength={17}
               className="input rounded-l-none"
               placeholder="98765 43210"
               required

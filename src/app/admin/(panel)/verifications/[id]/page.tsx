@@ -11,6 +11,8 @@ import { VERIFICATION_CHECKLIST } from "@/lib/verification-constants";
 import { SectionHeading } from "@/components/admin/ui";
 import type { ListingType, PropertyType, SiteVerification } from "@/lib/types";
 import { deleteVerificationPhoto } from "@/app/admin/verification-actions";
+import { DOCUMENT_ROW_SELECT, PropertyDocuments, type DocumentRow } from "@/components/admin/PropertyDocuments";
+import { PIN_MISMATCH_M, distanceMetres, mapsLink } from "@/lib/geo";
 import { VisitForm } from "./VisitForm";
 
 export const metadata: Metadata = { title: "Site visit" };
@@ -31,6 +33,8 @@ type Visit = SiteVerification & {
   owner_name: string | null;
   owner_phone: string | null;
   assignee_name: string | null;
+  pin_lat: number | null;
+  pin_lng: number | null;
 };
 
 function parseChecklist(v: unknown): Record<string, boolean> {
@@ -62,7 +66,7 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
 
   const visit = await db.one<Visit>(
     `SELECT v.*, p.reference_no, p.title, p.listing_type, p.property_type, p.price, p.locality, p.city,
-            p.private_address, p.private_landmark, p.bedrooms, p.bathrooms, p.area_sqft,
+            p.private_address, p.private_landmark, p.bedrooms, p.bathrooms, p.area_sqft, p.latitude AS pin_lat, p.longitude AS pin_lng,
             o.name AS owner_name, o.phone AS owner_phone, a.name AS assignee_name
        FROM site_verifications v
        JOIN properties p ON p.id = v.property_id
@@ -74,7 +78,7 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
   if (!visit) notFound();
   if (staff.role !== "admin" && visit.assigned_to !== staff.userId) notFound();
 
-  const [photos, listingPhotos] = await Promise.all([
+  const [photos, listingPhotos, documents] = await Promise.all([
     db.all<{ id: string; storage_path: string }>(
       "SELECT id, storage_path FROM site_verification_photos WHERE verification_id = ? ORDER BY created_at",
       [visit.id],
@@ -85,11 +89,14 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
         ORDER BY is_cover DESC, sort_order, created_at`,
       [visit.property_id],
     ),
+    db.all<DocumentRow>(DOCUMENT_ROW_SELECT, [visit.property_id]),
   ]);
 
   const checklist = parseChecklist(visit.checklist);
   const mapsQuery = [visit.private_address, visit.private_landmark, visit.locality, visit.city].filter(Boolean).join(", ");
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
+  const pin = visit.pin_lat !== null && visit.pin_lng !== null ? { lat: Number(visit.pin_lat), lng: Number(visit.pin_lng) } : null;
+  // The owner's pin when there is one; otherwise search by the address.
+  const mapsUrl = pin ? mapsLink(pin.lat, pin.lng) : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsQuery)}`;
   const phone = visit.owner_phone?.replace(/\D/g, "") || null;
   const typeLabel = PROPERTY_TYPES.find((t) => t.value === visit.property_type)?.label ?? visit.property_type;
   const listingLabel = LISTING_TYPES.find((t) => t.value === visit.listing_type)?.label ?? visit.listing_type;
@@ -104,6 +111,7 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
   const refPill = "rounded-lg bg-[var(--s-brand-soft)] px-2.5 py-1 font-mono text-sm font-extrabold text-[var(--brand)]";
   const lat = visit.latitude !== null ? Number(visit.latitude) : null;
   const lng = visit.longitude !== null ? Number(visit.longitude) : null;
+  const fromPin = pin && lat !== null && lng !== null ? distanceMetres(pin, { lat, lng }) : null;
 
   const isAssignee = visit.assigned_to === staff.userId;
   const photoGrid = photos.length > 0 && (
@@ -171,8 +179,9 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
                 <path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z" />
                 <circle cx="12" cy="9" r="2.5" />
               </svg>
-              Open in Maps
+              {pin ? "Open the owner's pin in Maps" : "Open in Maps"}
             </a>
+            {!pin && <p className="mt-2 text-xs text-[var(--s-muted)]">The owner didn&apos;t drop a map pin, so this searches the address.</p>}
 
             <div className="mt-5 border-t border-[var(--s-border)] pt-4">
               <p className="text-[13px] font-bold text-[var(--s-muted)]">Owner</p>
@@ -231,6 +240,13 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
             )}
             <p className="mt-2 text-xs text-[var(--s-muted)]">Compare these with what you see on site.</p>
           </section>
+
+          <PropertyDocuments
+            propertyId={visit.property_id}
+            docs={documents}
+            canReview={staff.role === "admin" || isAssignee}
+            canDelete={false}
+          />
         </div>
 
         <div className="min-w-0 space-y-5">
@@ -243,7 +259,7 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
               {photoGrid}
             </section>
           ) : canAct ? (
-            <VisitForm visitId={visit.id} checklist={VERIFICATION_CHECKLIST} photoCount={photos.length}>
+            <VisitForm visitId={visit.id} checklist={VERIFICATION_CHECKLIST} photoCount={photos.length} pin={pin}>
               {photoGrid}
             </VisitForm>
           ) : (
@@ -313,6 +329,13 @@ export default async function SiteVisitPage({ params }: PageProps<"/admin/verifi
                       </a>
                       {visit.location_accuracy_m !== null && (
                         <span className="ml-2 text-sm text-[var(--s-muted)]">± {visit.location_accuracy_m} m</span>
+                      )}
+                      {fromPin !== null && (
+                        <p className={`mt-1 text-sm font-semibold ${fromPin > PIN_MISMATCH_M ? "text-[var(--s-late)]" : "text-emerald-700"}`}>
+                          {fromPin > PIN_MISMATCH_M
+                            ? `${fromPin.toLocaleString("en-IN")} m from the owner's pin: check the address before approving.`
+                            : `${fromPin} m from the owner's pin ✓`}
+                        </p>
                       )}
                     </div>
                   )}

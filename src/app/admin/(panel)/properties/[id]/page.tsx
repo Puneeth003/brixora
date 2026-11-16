@@ -19,6 +19,8 @@ import { PhotoUpload } from "@/components/admin/PhotoUpload";
 import { DeleteListingForm } from "@/components/admin/ListingRemoveMenu";
 import { ActivityList } from "@/components/admin/ActivityList";
 import { VerificationPanel } from "@/components/admin/VerificationPanel";
+import { DOCUMENT_ROW_SELECT, PropertyDocuments, type DocumentRow } from "@/components/admin/PropertyDocuments";
+import { mapsLink } from "@/lib/geo";
 import type { ActivityLog, Builder, ChangeRequest, Profile, Project, Property, PropertyImage, SiteVerification } from "@/lib/types";
 import {
   archiveProperty,
@@ -73,7 +75,7 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
   type VisitRow = Pick<SiteVerification, "id" | "status" | "result" | "scheduled_at" | "assigned_to" | "visited_at" | "notes"> & {
     assignee_name: string | null;
   };
-  const [owner, images, builders, projects, activity, requests, visits, verifier, staff, matchingClients] = await Promise.all([
+  const [owner, images, builders, projects, activity, requests, visits, verifier, staff, matchingClients, documents] = await Promise.all([
     db.one<Profile>("SELECT id, role, name, phone, wa_opt_out, created_at FROM users WHERE id = ?", [p.owner_id]),
     db.all<PropertyImage>("SELECT * FROM property_images WHERE property_id = ? ORDER BY sort_order, created_at", [id]),
     db.all<Builder>("SELECT * FROM builders ORDER BY name"),
@@ -96,6 +98,7 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
     staffOptions(),
     // Who to tell about it: for listings in review or live.
     ["pending", "under_review", "approved"].includes(p.status) ? matchingClientsFor(p) : Promise.resolve([]),
+    db.all<DocumentRow>(DOCUMENT_ROW_SELECT, [id]),
   ]);
   const openVisit = visits.find((v) => v.status === "scheduled") ?? null;
   const pastVisits = visits.filter((v) => v.status !== "scheduled");
@@ -315,6 +318,26 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
                 <dt className="text-[11px] font-bold tracking-wider text-[var(--s-muted)] uppercase">Landmark</dt>
                 <dd className="mt-0.5">{p.private_landmark ?? "—"}</dd>
               </div>
+              <div>
+                <dt className="text-[11px] font-bold tracking-wider text-[var(--s-muted)] uppercase">Map pin</dt>
+                <dd className="mt-0.5">
+                  {p.latitude !== null && p.longitude !== null ? (
+                    <a href={mapsLink(Number(p.latitude), Number(p.longitude))} target="_blank" rel="noopener" className="font-semibold text-brand-700 hover:underline">
+                      {Number(p.latitude).toFixed(5)}, {Number(p.longitude).toFixed(5)} ↗
+                    </a>
+                  ) : (
+                    "Not set"
+                  )}
+                </dd>
+              </div>
+              {p.owner_consent_at && (
+                <div>
+                  <dt className="text-[11px] font-bold tracking-wider text-[var(--s-muted)] uppercase">Owner consent</dt>
+                  <dd className="mt-0.5">
+                    {formatDateTime(p.owner_consent_at)} ({p.owner_consent_version})
+                  </dd>
+                </div>
+              )}
             </dl>
           </section>
 
@@ -334,6 +357,8 @@ export default async function PropertyAdminPage({ params, searchParams }: PagePr
               defaultWhen={defaultWhen}
             />
           )}
+
+          {p.status !== "draft" && <PropertyDocuments propertyId={p.id} docs={documents} canReview canDelete />}
 
           {(p.status === "pending" || p.status === "under_review") && (
             <DecisionPanel id={p.id} needsVerification={!p.verified_at} verifiedBySelf={p.verified_by === admin.userId} />

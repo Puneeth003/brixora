@@ -66,7 +66,12 @@ export type Property = {
   rera_no: string | null;
   featured: boolean;
   owner_id: string;
+  /** Private map pin dropped by the owner (DECIMAL comes back as a number). */
+  latitude: number | null;
+  longitude: number | null;
   submitted_at: string | null;
+  owner_consent_at: string | null;
+  owner_consent_version: string | null;
   reviewed_by: string | null;
   approved_at: string | null;
   verified_at: string | null;
@@ -306,6 +311,24 @@ export type ClientActivity = {
   body: string | null;
   property_id: string | null;
   actor_id: string | null;
+  created_at: string;
+};
+
+export type DocumentType = "sale_deed" | "khata" | "rtc" | "encumbrance" | "tax_receipt" | "rera" | "rental_agreement" | "id_proof" | "other";
+
+export type PropertyDocument = {
+  id: string;
+  property_id: string;
+  doc_type: DocumentType;
+  storage_path: string;
+  original_name: string | null;
+  mime_type: string;
+  size_bytes: number;
+  status: "pending" | "accepted" | "rejected";
+  review_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  uploaded_by: string | null;
   created_at: string;
 };
 

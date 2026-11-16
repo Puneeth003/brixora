@@ -9,6 +9,7 @@ import { putFile, removeFile } from "@/lib/storage";
 import { parseIstInput } from "@/lib/time";
 import { notify } from "@/lib/whatsapp";
 import { VERIFICATION_CHECKLIST } from "@/lib/verification-constants";
+import { PHOTO_LIMITS } from "@/lib/constants";
 import type { ActionState, SiteVerification } from "@/lib/types";
 
 // On-site verification, step one of the two-step approval. An admin schedules a visit
@@ -179,7 +180,7 @@ export async function uploadVerificationPhoto(formData: FormData): Promise<{ ok:
   if (!v || v.status !== "scheduled") return { ok: false, error: "This visit can no longer be changed." };
   const file = formData.get("file");
   if (!(file instanceof File) || !file.size) return { ok: false, error: "No photo received." };
-  if (file.size > 15 * 1024 * 1024) return { ok: false, error: "Each photo must be under 15 MB." };
+  if (file.size > PHOTO_LIMITS.maxBytes) return { ok: false, error: `Each photo must be under ${PHOTO_LIMITS.maxBytes / 1024 / 1024} MB.` };
   const count = await db.count("SELECT COUNT(*) FROM site_verification_photos WHERE verification_id = ?", [v.id]);
   if (count >= 12) return { ok: false, error: "Up to 12 photos per visit." };
 

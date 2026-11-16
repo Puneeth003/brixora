@@ -22,7 +22,8 @@ export const ownerPropertySchema = z.object({
   title: z.string().trim().min(10, "Title should be at least 10 characters").max(120),
   description: z.string().trim().min(30, "Please describe the property in at least 30 characters").max(4000),
   price: z.coerce.number().int().min(1000, "Please enter a valid price").max(10_000_000_000),
-  price_negotiable: z.coerce.boolean().default(false),
+  // z.coerce.boolean would turn the string "false" into true.
+  price_negotiable: z.preprocess((v) => v === true || v === "true" || v === "on" || v === 1 || v === "1", z.boolean()),
   locality: z.string().trim().min(2, "Locality is required").max(80),
   city: z.string().trim().min(2, "City is required").max(60),
   private_address: z.string().trim().min(5, "Address is required (kept private)").max(300),
@@ -53,9 +54,25 @@ export const adminPropertySchema = ownerPropertySchema.extend({
   internal_notes: optionalText(4000),
 });
 
+/** The owner's map pin (private). Kept out of ownerPropertySchema so admin edits don't need it. */
+const coord = (limit: number) =>
+  z.preprocess(
+    // "" and null would coerce to 0, a real place in the ocean.
+    (v) => (v === "" || v === null || v === undefined ? undefined : Number(v)),
+    z.number({ message: "Drop a pin on the map at the property." }).min(-limit).max(limit),
+  );
+
+export const pinSchema = z.object({ latitude: coord(90), longitude: coord(180) });
+
 export const ownerNameSchema = z.string().trim().min(2, "Please enter your name").max(80);
 
 export function firstError(error: z.ZodError) {
   const issue = error.issues[0];
   return issue?.message ?? "Please check the form.";
+}
+
+/** The form field the first error is about (for jumping back to it). */
+export function firstErrorField(error: z.ZodError) {
+  const key = error.issues[0]?.path[0];
+  return typeof key === "string" ? key : null;
 }

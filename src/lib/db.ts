@@ -122,6 +122,7 @@ export type Table =
   | "otp_codes"
   | "auth_attempts"
   | "builders"
+  | "property_documents"
   | "projects"
   | "properties"
   | "change_requests"
