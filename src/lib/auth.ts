@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { db, dbConfigured } from "./db";
 import { randomToken, sha256 } from "./crypto";
 import type { Profile } from "./types";
+import { env } from "./env";
 
 // Database-backed sessions. The cookie holds a random token; the sessions table keeps
 // only its SHA-256. Owners and staff (admin + agents) use separate cookies, and the
@@ -105,7 +106,7 @@ export async function requireOwner(returnTo = "/manage") {
 // ---------------------------------------------------------------------------
 
 /** ADMIN_2FA=off skips the authenticator step (password only). On by default. */
-export const adminMfaRequired = process.env.ADMIN_2FA !== "off";
+export const adminMfaRequired = async () => ((await env("ADMIN_2FA")) ?? "").trim().toLowerCase() !== "off";
 
 export type StaffRole = "admin" | "agent";
 export type Staff = { userId: string; email: string; name: string | null; role: StaffRole };
@@ -120,7 +121,7 @@ export async function checkStaff(): Promise<StaffCheck> {
   const s = await readSession("admin");
   if (!s?.email) return { status: "signed_out" };
   if (s.role !== "admin" && s.role !== "agent") return { status: "not_admin" };
-  if (adminMfaRequired && (!s.mfa_verified || !s.totp_enabled)) {
+  if ((await adminMfaRequired()) && (!s.mfa_verified || !s.totp_enabled)) {
     return { status: "needs_mfa", enrolled: s.totp_enabled, userId: s.id, email: s.email };
   }
   return { status: "ok", userId: s.id, email: s.email, name: s.name, role: s.role };

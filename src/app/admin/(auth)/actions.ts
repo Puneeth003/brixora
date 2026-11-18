@@ -44,7 +44,7 @@ export async function adminLogin(rawEmail: string, password: string): Promise<Lo
   await recordAttempt("admin_password", email, valid && Boolean(user));
   if (!user || !valid) return { ok: false, error: "Incorrect email or password." };
 
-  if (!adminMfaRequired) {
+  if (!(await adminMfaRequired())) {
     await startSession("admin", user.id);
     await logSignIn(user.id);
     return { ok: true, next: "/admin" };

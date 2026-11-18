@@ -1,6 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { db, transaction, uuid } from "@/lib/db";
 import { safeEqual } from "@/lib/crypto";
+import { env } from "@/lib/env";
 import { removeStoredImage } from "@/lib/images";
 import { removeFile } from "@/lib/storage";
 
@@ -12,7 +13,7 @@ import { removeFile } from "@/lib/storage";
 // missed run is harmless.
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
+  const secret = await env("CRON_SECRET");
   const auth = request.headers.get("authorization") ?? "";
   if (!secret || !safeEqual(auth, `Bearer ${secret}`)) return new Response("Unauthorized", { status: 401 });
 

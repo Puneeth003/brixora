@@ -115,7 +115,7 @@ async function ProfileSection({ userId, email }: { userId: string; email: string
       </Card>
       <Card title="Two-factor authentication">
         <ul className="divide-y divide-[var(--s-border)]">
-          <StatusRow label="Required for staff" on={adminMfaRequired} detail="Controlled by the ADMIN_2FA environment variable." />
+          <StatusRow label="Required for staff" on={await adminMfaRequired()} detail="ADMIN_2FA in Settings → Environment variables." />
           <StatusRow label="Authenticator set up on your account" on={Boolean(user?.totp_enabled)} />
         </ul>
       </Card>
@@ -281,7 +281,7 @@ async function SecuritySection({ email }: { email: string }) {
     <>
       <Card title="Security" description="Read-only. These are configured through environment variables.">
         <ul className="divide-y divide-[var(--s-border)]">
-          <StatusRow label="Two-factor authentication" on={adminMfaRequired} detail="ADMIN_2FA" />
+          <StatusRow label="Two-factor authentication" on={await adminMfaRequired()} detail="ADMIN_2FA" />
           <StatusRow label="Email" on={mailOn} detail={mailOn ? `${mail.host} · from ${mail.from || "(no sender set)"}` : "SMTP_HOST"} />
           <StatusRow label="WhatsApp" on={whatsappOn}
             detail={!whatsappOn && envProblems.length ? `${envProblems.join(", ")}: placeholder text, not a real value` : "Settings → WhatsApp, or WHATSAPP_TOKEN"}

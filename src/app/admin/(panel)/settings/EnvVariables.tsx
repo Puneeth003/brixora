@@ -38,7 +38,7 @@ function parseDotenv(text: string) {
 const isPlaceholder = (v: string) => !v.trim() || /^<.*>$/.test(v.trim()) || /\bLATER\b/.test(v);
 
 /** Variables that only the hosting panel can set (the site needs them to start, or at build time). */
-const SERVER_ONLY = /^(DB_|AUTH_SECRET$|NEXT_PUBLIC_|UPLOAD_DIR$|CRON_SECRET$|ADMIN_2FA$|NODE_ENV$|TURNSTILE_)/;
+const SERVER_ONLY = /^(DB_|AUTH_SECRET$|UPLOAD_DIR$|NODE_ENV$)/;
 
 function Status({ state }: { state: ActionState }) {
   if (!state) return null;
@@ -78,6 +78,12 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
     } catch {
       setState({ ok: false, error: "The browser blocked clipboard access. Paste into the box with Ctrl+V / ⌘V instead." });
     }
+  }
+
+  async function loadFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 200_000) return setState({ ok: false, error: "That file is too big for a .env or notes file." });
+    setDotenv(await file.text());
   }
 
   function importText() {
@@ -242,7 +248,7 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
       {importing && (
         <div className="space-y-2 rounded-2xl border border-[var(--s-border)] p-4">
           <label htmlFor="env-import" className="label">
-            Paste your .env file or notes as they are
+            Paste or upload your .env file or notes (.txt) as they are
           </label>
           <p className="text-xs text-[var(--s-muted)]">
             Lines like <code>KEY=value</code> or <code>KEY: value</code> are picked up. Headings, comments, placeholders like{" "}
@@ -257,13 +263,25 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
             placeholder={"META_APP_ID=2001817940484419\nWHATSAPP_ES_CONFIG_ID=…"}
             className="input font-mono text-xs"
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button type="button" onClick={importText} disabled={!dotenv.trim()} className="btn-primary px-3 py-2 text-sm">
               Import
             </button>
             <button type="button" onClick={pasteClipboard} className="btn-secondary px-3 py-2 text-sm">
               Paste from clipboard
             </button>
+            <label className="btn-secondary cursor-pointer px-3 py-2 text-sm">
+              Upload .txt / .env
+              <input
+                type="file"
+                accept=".txt,.env,text/plain"
+                className="sr-only"
+                onChange={(e) => {
+                  void loadFile(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
             <button type="button" onClick={() => setImporting(false)} className="btn-secondary px-3 py-2 text-sm">
               Cancel
             </button>

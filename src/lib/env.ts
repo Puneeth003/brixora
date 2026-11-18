@@ -6,8 +6,8 @@ import { db } from "./db";
 // touching the hosting panel. Stored encrypted in app_config as "env:<NAME>" and read
 // before process.env, so a value saved here wins over the server's.
 //
-// Database, AUTH_SECRET (the encryption key itself), UPLOAD_DIR and NEXT_PUBLIC_* stay
-// server-only: the site can't start without them, or they're baked in at build time.
+// Database, AUTH_SECRET (the encryption key itself) and UPLOAD_DIR stay server-only:
+// the site can't start without them.
 
 export const SETTABLE_ENV = [
   { name: "META_APP_ID", group: "WhatsApp", secret: false, hint: "Meta app ID (App settings → Basic)" },
@@ -26,6 +26,8 @@ export const SETTABLE_ENV = [
   { name: "SMTP_PASS", group: "Email", secret: true, hint: "Mailbox password" },
   { name: "MAIL_FROM", group: "Email", secret: false, hint: "Sender address" },
   { name: "MAIL_FROM_NAME", group: "Email", secret: false, hint: "Sender name" },
+  { name: "CRON_SECRET", group: "Security", secret: true, hint: "Bearer token for the daily expire-listings job" },
+  { name: "ADMIN_2FA", group: "Security", secret: false, hint: "on (default) or off: staff authenticator step" },
 ] as const;
 
 export type SettableEnvName = (typeof SETTABLE_ENV)[number]["name"];
