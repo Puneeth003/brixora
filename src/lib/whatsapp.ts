@@ -2,6 +2,7 @@ import "server-only";
 import { decrypt } from "./crypto";
 import { db, uuid } from "./db";
 import { env } from "./env";
+import { getSite } from "./site-settings";
 
 // WhatsApp Cloud API (Meta) template sender. See SPEC.md §10, §12.
 // If a BSP (Interakt / WATI / AiSensy) is chosen instead, replace sendTemplate() only.
@@ -80,7 +81,7 @@ export function normalizePhone(phone: string) {
 }
 
 export async function brokeragePhone() {
-  return ((await env("BROKERAGE_ENQUIRY_WHATSAPP")) || process.env.NEXT_PUBLIC_BROKERAGE_WHATSAPP || "").replace(/\D/g, "");
+  return ((await env("BROKERAGE_ENQUIRY_WHATSAPP")) || (await getSite()).brokerage.whatsapp || "").replace(/\D/g, "");
 }
 
 export const graphVersion = async () => (await env("WHATSAPP_API_VERSION")) || "v26.0";

@@ -123,7 +123,7 @@ export async function saveEnvVariables(input: { set: Record<string, string>; rem
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Settings → Organization → Website details. An empty field falls back to the server's NEXT_PUBLIC_* value. */
+/** Settings → Organization → Website details. An empty contact field is hidden on the website. */
 export async function saveSiteDetails(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const admin = await requireAdmin();
   const values = SITE_FIELDS.map((f) => [f.key, str(formData, f.key)] as const);
@@ -131,7 +131,8 @@ export async function saveSiteDetails(_prev: ActionState, formData: FormData): P
     if (value.length > (key === "address" ? 300 : 120)) return { ok: false, error: `${key === "address" ? "Office address" : "Each field"} is too long.` };
   }
   const get = (k: string) => values.find(([key]) => key === k)?.[1] ?? "";
-  if (get("name") && get("name").length < 2) return { ok: false, error: "Brand name must be at least 2 characters." };
+  if (get("name").length < 2) return { ok: false, error: "Brand name must be at least 2 characters." };
+  if (!get("defaultCity")) return { ok: false, error: "City is required." };
   if (get("email") && !EMAIL.test(get("email"))) return { ok: false, error: "Email doesn't look right." };
   const wa = get("whatsapp").replace(/\D/g, "");
   if (get("whatsapp") && !/^\d{10,15}$/.test(wa)) return { ok: false, error: "WhatsApp must be 10–15 digits with country code, e.g. 919845012345." };
@@ -140,10 +141,10 @@ export async function saveSiteDetails(_prev: ActionState, formData: FormData): P
   const before = await savedSiteDetails();
   for (const [key, raw] of values) {
     const value = key === "whatsapp" ? wa : raw;
-    if (value) await db.run("INSERT INTO app_config (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [`site:${key}`, value]);
-    else await db.run("DELETE FROM app_config WHERE name = ?", [`site:${key}`]);
+    // Saved even when empty: an empty contact field is hidden on the website.
+    await db.run("INSERT INTO app_config (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [`site:${key}`, value]);
   }
-  const changes = diffFields(before, Object.fromEntries(values.filter(([, v]) => v).map(([k, v]) => [k, k === "whatsapp" ? wa : v])));
+  const changes = diffFields(before, Object.fromEntries(values.map(([k, v]) => [k, k === "whatsapp" ? wa : v])));
   if (Object.keys(changes).length) {
     await logActivity({ entityType: "settings", entityId: SETTINGS_ENTITY_ID, action: "site_details_changed", actorType: "admin", actorId: admin.userId, diff: changes });
   }

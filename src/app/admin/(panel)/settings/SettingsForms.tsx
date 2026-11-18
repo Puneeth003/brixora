@@ -150,9 +150,9 @@ export function OrganizationForm({
   );
 }
 
-export type SiteDetailField = { key: string; label: string; hint: string; value: string; fallback: string };
+export type SiteDetailField = { key: string; label: string; hint: string; value: string; required: boolean };
 
-/** Brand name and public contact details. An empty field uses the server's value (shown as the placeholder). */
+/** Brand name and public contact details. A contact field left empty is hidden on the website. */
 export function SiteDetailsForm({ fields }: { fields: SiteDetailField[] }) {
   const [state, action, pending] = useActionState(saveSiteDetails, null);
   return (
@@ -164,7 +164,7 @@ export function SiteDetailsForm({ fields }: { fields: SiteDetailField[] }) {
               {f.label}
             </label>
             {f.key === "address" ? (
-              <textarea id={`site-${f.key}`} name={f.key} defaultValue={f.value} rows={2} maxLength={300} placeholder={f.fallback || f.hint} className="input" />
+              <textarea id={`site-${f.key}`} name={f.key} defaultValue={f.value} rows={2} maxLength={300} placeholder="Empty: not shown on the website" className="input" />
             ) : (
               <input
                 id={`site-${f.key}`}
@@ -173,11 +173,12 @@ export function SiteDetailsForm({ fields }: { fields: SiteDetailField[] }) {
                 maxLength={120}
                 type={f.key === "email" ? "email" : "text"}
                 inputMode={f.key === "phone" || f.key === "whatsapp" ? "tel" : undefined}
-                placeholder={f.fallback || f.hint}
+                required={f.required}
+                placeholder={f.required ? f.hint : "Empty: not shown on the website"}
                 className="input"
               />
             )}
-            <p className="mt-1 text-xs text-[var(--s-muted)]">{f.fallback && !f.value ? `Using the server's value. ${f.hint}` : f.hint}</p>
+            <p className="mt-1 text-xs text-[var(--s-muted)]">{f.required ? `${f.hint}. Required.` : `${f.hint}. Leave empty to hide it.`}</p>
           </div>
         ))}
       </div>

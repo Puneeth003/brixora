@@ -140,7 +140,8 @@ async function OrganizationSection() {
     defaultCity: site.defaultCity,
     ...site.brokerage,
   };
-  const fields = SITE_FIELDS.map((f) => ({ key: f.key, label: f.label, hint: f.hint, value: saved[f.key] ?? "", fallback: fallback[f.key] ?? "" }));
+  // Before the first save the form shows what the website currently uses.
+  const fields = SITE_FIELDS.map((f) => ({ key: f.key, label: f.label, hint: f.hint, required: f.required, value: saved[f.key] ?? fallback[f.key] ?? "" }));
   return (
     <>
       <Card title="Organization" description="Workspace colours and listing defaults.">
@@ -151,7 +152,7 @@ async function OrganizationSection() {
           refPrefix={get("ref_prefix") ?? "BRX"}
         />
       </Card>
-      <Card title="Website details" description="Brand name and the contact details shown across the public site, emails and legal pages. Saving updates every page straight away, with no redeploy. Leave a field empty to use the hosting panel's NEXT_PUBLIC_* value.">
+      <Card title="Website details" description="Brand name and the contact details shown across the public site, emails and legal pages. Saving updates every page straight away, with no redeploy. A contact field left empty isn't shown anywhere on the website.">
         <SiteDetailsForm fields={fields} />
       </Card>
     </>

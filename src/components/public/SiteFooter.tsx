@@ -87,9 +87,11 @@ export async function SiteFooter() {
                 </a>
               </li>
             )}
-            <li className="flex items-start gap-2 text-zinc-400">
-              <MapPinIcon className="mt-0.5" /> {site.brokerage.address || site.defaultCity}
-            </li>
+            {site.brokerage.address && (
+              <li className="flex items-start gap-2 text-zinc-400">
+                <MapPinIcon className="mt-0.5" /> {site.brokerage.address}
+              </li>
+            )}
           </ul>
         </div>
       </div>
