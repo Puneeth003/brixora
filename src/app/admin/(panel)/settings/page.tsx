@@ -8,11 +8,12 @@ import { site } from "@/lib/site";
 import { PageHeader } from "@/components/admin/ui";
 import { ChangePasswordForm } from "@/components/crm/forms";
 import { signOutAllStaff } from "@/app/admin/settings-actions";
-import { brokeragePhone, graphVersion, normalizePhone, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
+import { brokeragePhone, graphVersion, metaTemplateStatus, normalizePhone, templateSettings, TEMPLATES, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
 import { formatDateTime } from "@/lib/format";
 import { OrganizationForm, ProfileForm, TestEmailForm } from "./SettingsForms";
 import { EnvVariables } from "./EnvVariables";
 import { WhatsAppConnect } from "./WhatsAppConnect";
+import { WhatsAppTemplates } from "./WhatsAppTemplates";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -21,6 +22,7 @@ const SECTIONS = [
   { key: "organization", label: "Organization", hint: "Colours, listings and verification", adminOnly: true },
   { key: "users", label: "Users & roles", hint: "Staff accounts and workload", adminOnly: true },
   { key: "whatsapp", label: "WhatsApp", hint: "Connect the business number", adminOnly: true },
+  { key: "templates", label: "WhatsApp templates", hint: "Names, language, test sends", adminOnly: true },
   { key: "env", label: "Environment variables", hint: "WhatsApp and email keys", adminOnly: true },
   { key: "security", label: "Security", hint: "Sign-in and integrations", adminOnly: true },
 ] as const;
@@ -64,6 +66,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
           {active === "organization" && <OrganizationSection />}
           {active === "users" && <UsersSection />}
           {active === "whatsapp" && <WhatsAppSection />}
+          {active === "templates" && <TemplatesSection />}
           {active === "env" && <EnvSection />}
           {active === "security" && <SecuritySection email={staff.email} />}
         </div>
@@ -243,6 +246,31 @@ async function WhatsAppSection() {
           <li>When Meta asks, choose to connect without importing existing contacts or chat history.</li>
         </ul>
       </Card>
+    </>
+  );
+}
+
+async function TemplatesSection() {
+  const [settings, status] = await Promise.all([templateSettings(), metaTemplateStatus()]);
+  const templates = TEMPLATES.map((t) => ({
+    ...t,
+    ...settings[t.key],
+    status: status?.get(`${settings[t.key].name}|${settings[t.key].lang}`) ?? null,
+  }));
+  return (
+    <>
+      <Card
+        title="WhatsApp templates"
+        description="Every message the website sends on WhatsApp. Write and approve the wording in Meta (WhatsApp Manager → Message templates), then make the name and language here match what Meta approved."
+      >
+        <WhatsAppTemplates templates={templates} statusKnown={status !== null} />
+      </Card>
+      {status === null && (
+        <p className="px-1 text-xs text-[var(--s-muted)]">
+          Meta&apos;s approval status shows here once a number is connected, or once WHATSAPP_TOKEN and WHATSAPP_WABA_ID are set in{" "}
+          <Link href="/admin/settings?section=env" className="underline">Environment variables</Link>.
+        </p>
+      )}
     </>
   );
 }

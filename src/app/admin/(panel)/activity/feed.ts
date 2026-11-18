@@ -420,6 +420,7 @@ const SETTINGS_VERBS: Record<string, string> = {
   whatsapp_connected: "connected WhatsApp",
   whatsapp_disconnected: "disconnected WhatsApp",
   env_changed: "changed environment variables",
+  templates_changed: "changed WhatsApp template settings",
 };
 
 /** Timeline dot category by action (the part before any ":"); anything else is "listing". */

@@ -21,7 +21,49 @@ export type NotifyTemplate =
   | "site_visit_scheduled" // [ref, date & time]
   | "staff_invite"; // [name, set-password link]
 
-type TemplateName = NotifyTemplate | "otp_login";
+export type TemplateName = NotifyTemplate | "otp_login";
+
+/** Every template the website sends, with its variables and the samples Meta asks for. */
+export const TEMPLATES: { key: TemplateName; category: "Authentication" | "Utility"; purpose: string; params: string[]; sample: string[] }[] = [
+  { key: "otp_login", category: "Authentication", purpose: "Login code", params: ["code"], sample: ["482913"] },
+  { key: "submission_received", category: "Utility", purpose: "Owner posted a property", params: ["name", "ref"], sample: ["Ravi", "BRX-2026-0042"] },
+  { key: "listing_approved", category: "Utility", purpose: "Listing is live", params: ["ref", "link"], sample: ["BRX-2026-0042", "https://brixora.in/properties/BRX-2026-0042"] },
+  { key: "listing_rejected", category: "Utility", purpose: "Listing declined", params: ["ref", "reason"], sample: ["BRX-2026-0042", "Photos are not clear"] },
+  { key: "change_received", category: "Utility", purpose: "Owner asked for a change", params: ["ref", "change"], sample: ["BRX-2026-0042", "Price change"] },
+  { key: "change_approved", category: "Utility", purpose: "Change approved", params: ["ref", "change"], sample: ["BRX-2026-0042", "Price change"] },
+  { key: "change_rejected", category: "Utility", purpose: "Change declined", params: ["ref", "change", "reason"], sample: ["BRX-2026-0042", "Price change", "Price is outside the market range"] },
+  { key: "sold_confirmed", category: "Utility", purpose: "Marked as sold", params: ["ref"], sample: ["BRX-2026-0042"] },
+  { key: "enquiry_forward", category: "Utility", purpose: "New enquiry to the team", params: ["ref", "name", "phone", "message", "link"], sample: ["BRX-2026-0042", "Anita", "+91 98450 12345", "Is this still available?", "https://brixora.in/properties/BRX-2026-0042"] },
+  { key: "enquiry_reply", category: "Utility", purpose: "Team replied to an enquiry", params: ["name", "ref", "link"], sample: ["Anita", "BRX-2026-0042", "https://brixora.in/account/enquiries"] },
+  { key: "site_visit_scheduled", category: "Utility", purpose: "Site visit booked", params: ["ref", "date & time"], sample: ["BRX-2026-0042", "12 Nov 2026, 11:00 AM"] },
+  { key: "staff_invite", category: "Utility", purpose: "New staff member invited", params: ["name", "link"], sample: ["Priya", "https://brixora.in/admin/forgot-password"] },
+];
+
+export type TemplateSetting = { name: string; lang: string; enabled: boolean };
+
+/**
+ * Settings → WhatsApp templates: the name and language each template has in Meta, and
+ * whether it's sent at all. Stored in app_config as "tpl:<key>" (JSON). Unset means the
+ * key itself, WHATSAPP_TEMPLATE_LANG and on.
+ */
+export async function templateSettings(): Promise<Record<TemplateName, TemplateSetting>> {
+  const rows = await db.all<{ name: string; value: string }>("SELECT name, value FROM app_config WHERE name LIKE 'tpl:%'");
+  const lang = (await env("WHATSAPP_TEMPLATE_LANG")) || "en";
+  const out = {} as Record<TemplateName, TemplateSetting>;
+  for (const t of TEMPLATES) {
+    let saved: Partial<TemplateSetting> = {};
+    try {
+      saved = JSON.parse(rows.find((r) => r.name === `tpl:${t.key}`)?.value ?? "{}");
+    } catch {}
+    out[t.key] = {
+      name: saved.name || t.key,
+      lang: saved.lang || lang,
+      // The login code can't be switched off: nobody could sign in.
+      enabled: t.key === "otp_login" ? true : saved.enabled !== false,
+    };
+  }
+  return out;
+}
 
 // Templates that still go to owners who replied STOP.
 const ESSENTIAL: TemplateName[] = ["otp_login", "listing_rejected", "change_rejected", "enquiry_forward", "staff_invite"];
@@ -103,11 +145,13 @@ export async function whatsappConnection(): Promise<WhatsAppConnection | null> {
   }
   const { token, phoneNumberId: envPhoneId } = await envCredentials();
   if (!token || !envPhoneId) return null;
-  return { token, phoneNumberId: envPhoneId, wabaId: null, displayPhone: null, verifiedName: null, connectedAt: null, source: "env" };
+  const wabaId = ((await env("WHATSAPP_WABA_ID")) ?? "").trim();
+  return { token, phoneNumberId: envPhoneId, wabaId: /^\d+$/.test(wabaId) ? wabaId : null, displayPhone: null, verifiedName: null, connectedAt: null, source: "env" };
 }
 
 async function sendTemplate(to: string, template: string, params: string[]): Promise<SendResult> {
   const conn = await whatsappConnection();
+  const setting = (await templateSettings())[template as TemplateName];
 
   if (!conn) {
     if (process.env.NODE_ENV === "production") return { ok: false, error: "WhatsApp is not configured" };
@@ -125,7 +169,7 @@ async function sendTemplate(to: string, template: string, params: string[]): Pro
     components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: params[0] }] });
   }
 
-  const lang = (await env("WHATSAPP_TEMPLATE_LANG")) || "en";
+  const lang = setting?.lang || (await env("WHATSAPP_TEMPLATE_LANG")) || "en";
   // With coexistence the API number is the brokerage's own WhatsApp; it can't message itself.
   if (conn.displayPhone && normalizePhone(conn.displayPhone) === to) {
     return { ok: false, error: "Recipient is the connected WhatsApp number itself. Set BROKERAGE_ENQUIRY_WHATSAPP to another number." };
@@ -139,7 +183,7 @@ async function sendTemplate(to: string, template: string, params: string[]): Pro
         messaging_product: "whatsapp",
         to,
         type: "template",
-        template: { name: template, language: { code: lang }, components },
+        template: { name: setting?.name || template, language: { code: lang }, components },
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
@@ -202,6 +246,7 @@ export async function notify(to: string | null | undefined, template: NotifyTemp
   if (!to) return { ok: false, error: "No recipient phone" };
   try {
     const phone = normalizePhone(to);
+    if (!(await templateSettings())[template]?.enabled) return { ok: true, suppressed: true };
     if (!ESSENTIAL.includes(template)) {
       const user = await db.one<{ wa_opt_out: boolean }>("SELECT wa_opt_out FROM users WHERE phone = ?", [phone]);
       if (user?.wa_opt_out) return { ok: true, suppressed: true };
@@ -239,4 +284,29 @@ export function recentOtpCount(phone: string) {
     "SELECT COUNT(*) FROM messages WHERE recipient_phone = ? AND template_name = 'otp_login' AND created_at > ?",
     [normalizePhone(phone), new Date(Date.now() - 3_600_000)],
   );
+}
+
+/** Settings → WhatsApp templates "Send test": the template with its sample values, logged like any message. */
+export async function sendTemplateTest(template: TemplateName, phone: string) {
+  const t = TEMPLATES.find((x) => x.key === template);
+  if (!t) return { ok: false, error: "Unknown template" } as Result;
+  const id = await queue(phone, template, t.sample);
+  return deliver(id);
+}
+
+/** Approval status of each template in Meta (name → status by language), when the WABA is known. */
+export async function metaTemplateStatus(): Promise<Map<string, string> | null> {
+  const conn = await whatsappConnection();
+  if (!conn?.wabaId) return null;
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/${await graphVersion()}/${conn.wabaId}/message_templates?fields=name,status,language&limit=200`,
+      { headers: { Authorization: `Bearer ${conn.token}` }, cache: "no-store", signal: AbortSignal.timeout(10_000) },
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: { name: string; status: string; language: string }[] };
+    return new Map((json.data ?? []).map((t) => [`${t.name}|${t.language}`, t.status]));
+  } catch {
+    return null;
+  }
 }

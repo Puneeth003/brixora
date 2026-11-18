@@ -16,6 +16,7 @@ export const SETTABLE_ENV = [
   { name: "WHATSAPP_VERIFY_TOKEN", group: "WhatsApp", secret: true, hint: "Word you made up for the webhook" },
   { name: "WHATSAPP_TOKEN", group: "WhatsApp", secret: true, hint: "System-user token (if not using Connect)" },
   { name: "WHATSAPP_PHONE_NUMBER_ID", group: "WhatsApp", secret: false, hint: "Sending number's Phone number ID" },
+  { name: "WHATSAPP_WABA_ID", group: "WhatsApp", secret: false, hint: "WhatsApp Business Account ID (shows template status)" },
   { name: "WHATSAPP_TEMPLATE_LANG", group: "WhatsApp", secret: false, hint: "Template language, e.g. en or en_US" },
   { name: "WHATSAPP_API_VERSION", group: "WhatsApp", secret: false, hint: "Graph API version, e.g. v26.0" },
   { name: "BROKERAGE_ENQUIRY_WHATSAPP", group: "WhatsApp", secret: false, hint: "Team number for enquiry alerts, e.g. 919876543210" },

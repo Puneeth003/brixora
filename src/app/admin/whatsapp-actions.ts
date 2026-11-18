@@ -6,7 +6,8 @@ import { requireAdmin } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { graphVersion, whatsappConnection } from "@/lib/whatsapp";
+import { normalizeIndianPhone } from "@/lib/format";
+import { graphVersion, sendTemplateTest, TEMPLATES, whatsappConnection, type TemplateName, type TemplateSetting } from "@/lib/whatsapp";
 import type { ActionState } from "@/lib/types";
 
 // Connects the brokerage's existing WhatsApp Business app number to the Cloud API
@@ -109,4 +110,43 @@ export async function disconnectWhatsApp(): Promise<ActionState> {
   });
   revalidatePath("/admin/settings");
   return { ok: true, message: "WhatsApp disconnected." };
+}
+
+const TEMPLATE_NAME = /^[a-z0-9_]{1,512}$/;
+const LANG = /^[a-z]{2,3}(_[A-Z]{2})?$/;
+
+/** Settings → WhatsApp templates: Meta name, language and on/off for each template. */
+export async function saveTemplateSettings(input: Record<string, TemplateSetting>): Promise<ActionState> {
+  const admin = await requireAdmin();
+  const values: [string, string][] = [];
+  for (const t of TEMPLATES) {
+    const v = input?.[t.key];
+    if (!v) continue;
+    const name = String(v.name ?? "").trim();
+    const lang = String(v.lang ?? "").trim();
+    if (!TEMPLATE_NAME.test(name)) return { ok: false, error: `${t.key}: the Meta name may only use lowercase letters, digits and _.` };
+    if (!LANG.test(lang)) return { ok: false, error: `${t.key}: language must look like en or en_US.` };
+    values.push([`tpl:${t.key}`, JSON.stringify({ name, lang, enabled: t.key === "otp_login" ? true : Boolean(v.enabled) })]);
+  }
+  for (const [name, value] of values) await setConfig(name, value);
+  await logActivity({
+    entityType: "settings",
+    entityId: SETTINGS_ENTITY_ID,
+    action: "templates_changed",
+    actorType: "admin",
+    actorId: admin.userId,
+  });
+  revalidatePath("/admin/settings");
+  return { ok: true, message: "Template settings saved. They apply to the next message." };
+}
+
+/** Sends one template with its sample values to a test number. */
+export async function sendTemplateTestAction(template: string, phone: string): Promise<ActionState> {
+  await requireAdmin();
+  if (!TEMPLATES.some((t) => t.key === template)) return { ok: false, error: "Unknown template." };
+  const to = normalizeIndianPhone(phone) ?? (/^\d{10,15}$/.test(phone.replace(/\D/g, "")) ? phone.replace(/\D/g, "") : null);
+  if (!to) return { ok: false, error: "Enter a phone number with country code, e.g. 919876543210." };
+  const res = await sendTemplateTest(template as TemplateName, to);
+  revalidatePath("/admin/messages");
+  return res.ok ? { ok: true, message: `Sent ${template} to ${to}. Check that phone, and Admin → Messages for delivery.` } : { ok: false, error: `Not sent: ${res.error}` };
 }
