@@ -6,12 +6,15 @@ import { PropertyCard, PropertyCardSkeleton } from "@/components/public/Property
 import { Filters } from "@/components/public/Filters";
 import { RecentlyViewed } from "@/components/public/RecentlyViewed";
 import { Pagination } from "@/components/Pagination";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 
-export const metadata: Metadata = {
-  title: "Properties for sale and rent",
-  description: `Verified apartments, villas, plots and commercial properties for sale and rent in ${site.defaultCity}.`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSite();
+  return {
+    title: "Properties for sale and rent",
+    description: `Verified apartments, villas, plots and commercial properties for sale and rent in ${site.defaultCity}.`,
+  };
+}
 
 const KEYS = ["q", "locality", "listing", "type", "budget", "bhk", "furnishing", "area", "bath", "listed", "verified", "amenity", "sort", "page"] as const;
 

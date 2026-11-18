@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { site } from "@/lib/site";
 import { NAV_ICONS } from "./NavIcons";
 
 type Counts = { submissions: number; requests: number; failed: number; followUps: number; unread: number; visits: number; enquiries: number };
@@ -82,14 +81,14 @@ function NavList({ sections, onNavigate }: { sections: Section[]; onNavigate?: (
   );
 }
 
-function Brand({ role }: { role: "admin" | "agent" }) {
+function Brand({ role, brandName }: { role: "admin" | "agent"; brandName: string }) {
   return (
     <Link href="/admin" className="flex items-center gap-3 px-2">
       <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-lg font-extrabold text-[var(--brand)]">
-        {site.name.charAt(0).toUpperCase()}
+        {brandName.charAt(0).toUpperCase()}
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-[17px] font-extrabold tracking-tight">{site.name}</span>
+        <span className="block truncate text-[17px] font-extrabold tracking-tight">{brandName}</span>
         <span className="block text-xs font-semibold text-white/50">{role === "admin" ? "Admin" : "Agent"} workspace</span>
       </span>
     </Link>
@@ -97,7 +96,17 @@ function Brand({ role }: { role: "admin" | "agent" }) {
 }
 
 /** Desktop: sidebar on the dark frame. Phones: a drawer opened from the top bar. */
-export function AdminSidebar({ role, counts, footer }: { role: "admin" | "agent"; counts: Counts; footer: React.ReactNode }) {
+export function AdminSidebar({
+  role,
+  brandName,
+  counts,
+  footer,
+}: {
+  role: "admin" | "agent";
+  brandName: string;
+  counts: Counts;
+  footer: React.ReactNode;
+}) {
   const sections = sectionsFor(role, counts);
   // The drawer closes itself on navigation (NavList onNavigate).
   const [open, setOpen] = useState(false);
@@ -106,7 +115,7 @@ export function AdminSidebar({ role, counts, footer }: { role: "admin" | "agent"
     <>
       <aside className="sticky top-0 hidden h-dvh w-[252px] shrink-0 flex-col text-white md:flex">
         <div className="px-4 pt-6 pb-5">
-          <Brand role={role} />
+          <Brand role={role} brandName={brandName} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           <NavList sections={sections} />
@@ -126,7 +135,7 @@ export function AdminSidebar({ role, counts, footer }: { role: "admin" | "agent"
           <button type="button" className="absolute inset-0 bg-black/45" aria-label="Close menu" onClick={() => setOpen(false)} />
           <aside className="admin-sidebar absolute inset-y-0 left-0 flex w-[280px] flex-col rounded-l-none">
             <div className="px-4 pt-6 pb-5">
-              <Brand role={role} />
+              <Brand role={role} brandName={brandName} />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
               <NavList sections={sections} onNavigate={() => setOpen(false)} />

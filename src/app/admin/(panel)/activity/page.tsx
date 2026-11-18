@@ -21,6 +21,7 @@ import { ACTIVITY_TYPES, label } from "@/lib/crm-constants";
 import { formatDateTime } from "@/lib/format";
 import { nowMs, startOfTodayIstIso } from "@/lib/time";
 import { Empty, PageHeader, StatCard } from "@/components/admin/ui";
+import { Dropdown } from "@/components/Dropdown";
 import { Pagination } from "@/components/Pagination";
 import {
   activeStaffSince,
@@ -132,39 +133,50 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
           <span className="label">Search</span>
           <input name="q" type="search" defaultValue={filters.q} maxLength={80} placeholder="Client, listing reference or user" className="input" />
         </label>
-        <label className="min-w-[150px] flex-1">
-          <span className="label">Person</span>
-          <select name="person" defaultValue={filters.person} className="input">
-            <option value="">Everyone</option>
-            {staff.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name ?? s.email}
-                {s.is_active ? "" : " (inactive)"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="min-w-[150px] flex-1">
-          <span className="label">Area</span>
-          <select name="kind" defaultValue={filters.kind} className="input">
-            {KINDS.map((k) => (
-              <option key={k.value} value={k.value}>
-                {k.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="min-w-[170px] flex-1">
-          <span className="label">Action</span>
-          <select name="action" defaultValue={filters.action} className="input">
-            <option value="">Any action</option>
-            {ACTION_FILTERS.map((a) => (
-              <option key={a.value} value={a.value}>
-                {a.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="min-w-[150px] flex-1">
+          <label htmlFor="activity-person" className="label">
+            Person
+          </label>
+          <Dropdown
+            id="activity-person"
+            name="person"
+            label="Person"
+            variant="field"
+            defaultValue={filters.person}
+            searchable
+            searchPlaceholder="Search people…"
+            options={[
+              { value: "", label: "Everyone" },
+              ...staff.map((s) => ({ value: String(s.id), label: `${s.name ?? s.email}${s.is_active ? "" : " (inactive)"}` })),
+            ]}
+          />
+        </div>
+        <div className="min-w-[150px] flex-1">
+          <label htmlFor="activity-kind" className="label">
+            Area
+          </label>
+          <Dropdown
+            id="activity-kind"
+            name="kind"
+            label="Area"
+            variant="field"
+            defaultValue={filters.kind}
+            options={KINDS.map((k) => ({ value: k.value, label: k.label }))}
+          />
+        </div>
+        <div className="min-w-[170px] flex-1">
+          <label htmlFor="activity-action" className="label">
+            Action
+          </label>
+          <Dropdown
+            id="activity-action"
+            name="action"
+            label="Action"
+            variant="field"
+            defaultValue={filters.action}
+            options={[{ value: "", label: "Any action" }, ...ACTION_FILTERS.map((a) => ({ value: a.value, label: a.label }))]}
+          />
+        </div>
         <label>
           <span className="label">From</span>
           <input name="from" type="date" defaultValue={filters.from} max={todayKey} className="input" />

@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 
-export const metadata: Metadata = {
-  title: "Privacy policy",
-  description: `How ${site.name} collects, uses and protects your personal information.`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSite();
+  return {
+    title: "Privacy policy",
+    description: `How ${site.name} collects, uses and protects your personal information.`,
+  };
+}
 
 const LAST_UPDATED = "6 November 2026";
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  const site = await getSite();
   const { email, phone, address } = site.brokerage;
   const contact = email || phone || "our office";
   return (

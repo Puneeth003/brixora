@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { Dropdown } from "@/components/Dropdown";
 import { DOCUMENT_TYPES } from "@/lib/constants";
 import { compressImage } from "@/lib/compress";
 import { uploadStaffDocument } from "@/app/admin/document-actions";
@@ -39,13 +40,15 @@ export function StaffDocumentUpload({ propertyId }: { propertyId: string }) {
   return (
     <div className="space-y-2 border-t border-[var(--s-border)] pt-4">
       <div className="flex flex-wrap items-end gap-2">
-        <select aria-label="Document type" className="input min-w-0 flex-1" value={type} onChange={(e) => setType(e.target.value as DocumentType)}>
-          {DOCUMENT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+        <Dropdown
+          label="Document type"
+          variant="field"
+          className="min-w-0 flex-1"
+          value={type}
+          onChange={(v) => setType(v as DocumentType)}
+          searchable
+          options={DOCUMENT_TYPES}
+        />
         <label className={`btn-secondary cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}>
           {busy ? "Uploading…" : "Add document"}
           <input

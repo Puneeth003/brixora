@@ -6,7 +6,7 @@ import { getOwner } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { unreadReplies } from "@/lib/member";
 import { formatDateTime, formatPrice } from "@/lib/format";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 import { AccountShell } from "@/components/account/AccountShell";
 import { MarkRepliesRead, MessageForm } from "@/components/account/AccountForms";
 import type { EnquiryMessage, ListingType } from "@/lib/types";
@@ -106,7 +106,8 @@ async function Content() {
   );
 }
 
-function Bubble({ mine, at, body, fresh }: { mine: boolean; at: string; body: string; fresh?: boolean }) {
+async function Bubble({ mine, at, body, fresh }: { mine: boolean; at: string; body: string; fresh?: boolean }) {
+  const site = await getSite();
   return (
     <div className={`flex ${mine ? "justify-end" : ""}`}>
       <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${mine ? "bg-brand-50 text-brand-900" : "bg-zinc-100 text-zinc-800"} ${fresh ? "ring-2 ring-brand-300" : ""}`}>

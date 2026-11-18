@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PasswordInput } from "@/components/admin/PasswordInput";
-import { OrDivider } from "@/components/AuthScene";
+import { OrDivider } from "@/components/OrDivider";
 import { adminLogin } from "../actions";
 
 const ICON = "pointer-events-none absolute top-1/2 left-4 size-[18px] -translate-y-1/2 text-zinc-500";

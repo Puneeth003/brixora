@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { adminMfaRequired, requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getSite } from "@/lib/site-settings";
 import { fromNow } from "@/lib/time";
 import { AdminSidebar, UserCard } from "@/components/admin/AdminNav";
 import { adminSignOut } from "../actions";
@@ -24,7 +25,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
   const staff = await requireStaff();
   const isAdmin = staff.role === "admin";
   const mine = isAdmin ? "" : " AND assigned_to = ?";
-  const [submissions, requests, failed, followUps, unread, theme, visits, enquiries] = await Promise.all([
+  const [submissions, requests, failed, followUps, unread, theme, visits, enquiries, site] = await Promise.all([
     isAdmin ? db.count("SELECT COUNT(*) FROM properties WHERE status IN ('pending', 'under_review')") : 0,
     isAdmin ? db.count("SELECT COUNT(*) FROM change_requests WHERE status = 'pending' AND submitted = 1") : 0,
     isAdmin ? db.count("SELECT COUNT(*) FROM messages WHERE status = 'failed'") : 0,
@@ -46,6 +47,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
     isAdmin
       ? db.count("SELECT COUNT(*) FROM enquiries e LEFT JOIN clients c ON c.id = e.client_id WHERE c.id IS NULL OR c.status = 'new'")
       : 0,
+    getSite(),
   ]);
   const color = (name: string) => {
     const v = theme.find((t) => t.name === name)?.value;
@@ -64,6 +66,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
     <div className="admin-frame flex min-h-dvh flex-1" style={themeVars}>
       <AdminSidebar
         role={staff.role}
+        brandName={site.name}
         counts={{ submissions, requests, failed, followUps, unread, visits, enquiries }}
         footer={<UserCard name={displayName} email={staff.email} role={staff.role} signOut={signOut} />}
       />

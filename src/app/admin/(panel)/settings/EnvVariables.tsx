@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
+import { useConfirm } from "@/components/ConfirmDialog";
+import { Dropdown } from "@/components/Dropdown";
 import { saveEnvVariables } from "@/app/admin/settings-actions";
 import type { ActionState } from "@/lib/types";
 
@@ -60,13 +62,7 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
   const [dotenv, setDotenv] = useState("");
   const [state, setState] = useState<ActionState>(null);
   const [pending, startTransition] = useTransition();
-  const [confirming, setConfirming] = useState<Row | null>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    if (confirming) dialog.current?.showModal();
-    else dialog.current?.close();
-  }, [confirming]);
+  const [confirm, confirmDialog] = useConfirm();
 
   const used = new Set(rows.map((r) => r.name));
   const update = (id: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -125,18 +121,23 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
 
   const dropRow = (id: number) => setRows((rs) => (rs.length > 1 ? rs.filter((x) => x.id !== id) : [row()]));
 
-  function askDelete(r: Row) {
+  async function askDelete(r: Row) {
     // An empty row has nothing to lose.
     if (!r.name && !r.value) return dropRow(r.id);
-    setConfirming(r);
-  }
-
-  function confirmDelete() {
-    const r = confirming;
-    setConfirming(null);
-    if (!r) return;
+    const saved = Boolean(r.name && savedNames.includes(r.name));
+    const ok = await confirm({
+      title: `Delete ${r.name || "this row"}?`,
+      message: saved
+        ? byName.get(r.name)?.onServer
+          ? "The value saved here is removed now. The website goes back to the value set in the hosting panel."
+          : "The value saved here is removed now. Anything that uses it (WhatsApp or email) stops working until you set it again."
+        : "This row hasn't been saved yet, so nothing changes on the website.",
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     dropRow(r.id);
-    if (r.name && savedNames.includes(r.name)) {
+    if (saved) {
       startTransition(async () => {
         const res = await saveEnvVariables({ set: {}, remove: [r.name] });
         setState(res?.ok ? { ok: true, message: `${r.name} deleted.` } : res);
@@ -172,25 +173,23 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
           const keepSecret = Boolean(v?.secret && v.saved && !r.value);
           return (
             <li key={r.id} className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_2.25rem]">
-              <select
-                aria-label="Key"
+              <Dropdown
+                label="Key"
+                variant="field"
                 value={r.name}
-                onChange={(e) => update(r.id, { name: e.target.value, value: "", reveal: false })}
-                className="input font-mono text-xs"
-              >
-                <option value="">Choose a variable…</option>
-                {groups.map((g) => (
-                  <optgroup key={g} label={g}>
-                    {vars
+                onChange={(name) => update(r.id, { name, value: "", reveal: false })}
+                searchable
+                searchPlaceholder="Search variables…"
+                options={[
+                  { value: "", label: "Choose a variable…" },
+                  ...groups.flatMap((g) =>
+                    vars
                       .filter((x) => x.group === g && (x.name === r.name || !used.has(x.name)))
-                      .map((x) => (
-                        <option key={x.name} value={x.name}>
-                          {x.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                ))}
-              </select>
+                      .map((x) => ({ value: x.name, label: x.name, group: g })),
+                  ),
+                ]}
+                buttonClassName="font-mono text-xs"
+              />
               <button
                 type="button"
                 onClick={() => askDelete(r)}
@@ -296,35 +295,7 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
         <Status state={state} />
       </div>
 
-      <dialog
-        ref={dialog}
-        onClose={() => setConfirming(null)}
-        aria-labelledby="env-delete-title"
-        className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-2xl border border-[var(--s-border)] bg-white p-6 text-[var(--s-text)] shadow-xl backdrop:bg-black/40"
-      >
-        <h3 id="env-delete-title" className="text-base font-extrabold">
-          Delete {confirming?.name || "this row"}?
-        </h3>
-        <p className="mt-2 text-sm text-[var(--s-text-2)]">
-          {confirming?.name && savedNames.includes(confirming.name)
-            ? byName.get(confirming.name)?.onServer
-              ? "The value saved here is removed now. The website goes back to the value set in the hosting panel."
-              : "The value saved here is removed now. Anything that uses it (WhatsApp or email) stops working until you set it again."
-            : "This row hasn't been saved yet, so nothing changes on the website."}
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" autoFocus onClick={() => setConfirming(null)} className="btn-secondary px-4 py-2 text-sm">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={confirmDelete}
-            className="btn-primary bg-[var(--s-late)] px-4 py-2 text-sm hover:bg-[var(--s-late)] hover:opacity-90"
-          >
-            Delete
-          </button>
-        </div>
-      </dialog>
+      {confirmDialog}
     </div>
   );
 }

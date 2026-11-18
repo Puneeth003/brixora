@@ -1,7 +1,7 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
 import { envs } from "./env";
-import { site } from "./site";
+import { getSite, type SiteDetails } from "./site-settings";
 
 // Outgoing email over SMTP (Hostinger: smtp.hostinger.com, port 465, SMTP_SECURE=ssl).
 // Without SMTP_HOST, development prints messages to the server console instead;
@@ -68,6 +68,7 @@ export async function sendMail(msg: { to: string; subject: string; text: string;
     return "printed";
   }
   const from = e.MAIL_FROM || e.SMTP_USER;
+  const site = await getSite();
   await transport(e).sendMail({ from: `"${e.MAIL_FROM_NAME || site.name}" <${from}>`, ...msg });
   return "sent";
 }
@@ -92,7 +93,7 @@ export function mailErrorReason(e: unknown) {
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-function layout(bodyHtml: string) {
+function layout(site: SiteDetails, bodyHtml: string) {
   return `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18181b">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:14px;border:1px solid #e4e4e7">
@@ -103,7 +104,8 @@ function layout(bodyHtml: string) {
 </td></tr></table></body></html>`;
 }
 
-export function passwordResetEmail({ name, code, minutes }: { name: string | null; code: string; minutes: number }) {
+export async function passwordResetEmail({ name, code, minutes }: { name: string | null; code: string; minutes: number }) {
+  const site = await getSite();
   const hi = name || "there";
   const boxes = code
     .split("")
@@ -113,6 +115,7 @@ export function passwordResetEmail({ name, code, minutes }: { name: string | nul
     subject: `Your ${site.name} password reset code`,
     text: `Hi ${hi},\n\nYour ${site.name} password reset code is: ${code}\nIt expires in ${minutes} minutes.\n\nIf you didn't request this, you can ignore this email; your password stays the same.\n\n— ${site.name}`,
     html: layout(
+      site,
       `<p style="margin:0 0 12px">Hi <strong>${esc(hi)}</strong>,</p>
 <p style="margin:0 0 20px">We received a request to reset your ${esc(site.name)} password. Use this code to continue. It expires in <strong>${minutes} minutes</strong>.</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px"><tr>${boxes}</tr></table>
@@ -121,24 +124,28 @@ export function passwordResetEmail({ name, code, minutes }: { name: string | nul
   };
 }
 
-export function testEmail({ name }: { name: string | null }) {
+export async function testEmail({ name }: { name: string | null }) {
+  const site = await getSite();
   const hi = name || "there";
   return {
     subject: `${site.name} test email`,
     text: `Hi ${hi},\n\nThis is a test email from ${site.name}. If you can read this, outgoing email (password resets, welcome emails) is working.\n\n— ${site.name}`,
     html: layout(
+      site,
       `<p style="margin:0 0 12px">Hi <strong>${esc(hi)}</strong>,</p>
 <p style="margin:0">This is a test email from ${esc(site.name)}. If you can read this, outgoing email (password resets, welcome emails) is working.</p>`,
     ),
   };
 }
 
-export function passwordChangedEmail({ name }: { name: string | null }) {
+export async function passwordChangedEmail({ name }: { name: string | null }) {
+  const site = await getSite();
   const hi = name || "there";
   return {
     subject: `Your ${site.name} password was changed`,
     text: `Hi ${hi},\n\nThe password for your ${site.name} account was just changed, and every other session was signed out.\nIf this wasn't you, reset your password straight away and tell your administrator.\n\n— ${site.name}`,
     html: layout(
+      site,
       `<p style="margin:0 0 12px">Hi <strong>${esc(hi)}</strong>,</p>
 <p style="margin:0 0 12px">The password for your ${esc(site.name)} account was just changed, and every other session was signed out.</p>
 <p style="margin:0;color:#71717a;font-size:13px">If this wasn't you, reset your password straight away and tell your administrator.</p>`,
@@ -146,12 +153,14 @@ export function passwordChangedEmail({ name }: { name: string | null }) {
   };
 }
 
-export function welcomeEmail({ name, email, link }: { name: string | null; email: string; link: string }) {
+export async function welcomeEmail({ name, email, link }: { name: string | null; email: string; link: string }) {
+  const site = await getSite();
   const hi = name || "there";
   return {
     subject: `Your ${site.name} account is ready`,
     text: `Hi ${hi},\n\nAn account has been created for you on ${site.name} (${email}).\nSet your password here: ${link}\n\n— ${site.name}`,
     html: layout(
+      site,
       `<p style="margin:0 0 12px">Hi <strong>${esc(hi)}</strong>,</p>
 <p style="margin:0 0 20px">An account has been created for you on ${esc(site.name)} (<strong>${esc(email)}</strong>). Choose your password to sign in.</p>
 <p style="margin:0 0 20px"><a href="${esc(link)}" style="display:inline-block;background:#2f7d5f;color:#ffffff;text-decoration:none;font-weight:600;padding:11px 20px;border-radius:9px">Set my password</a></p>

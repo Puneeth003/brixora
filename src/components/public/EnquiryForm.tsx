@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { Dropdown } from "@/components/Dropdown";
 import { submitEnquiry } from "@/app/(site)/properties/[ref]/actions";
 import { VISIT_SLOTS } from "@/lib/visit-request";
 
@@ -66,16 +67,7 @@ export function EnquiryForm({ refNo, visitDates }: { refNo: string; visitDates: 
               <label className="label" htmlFor="eq-visit-time">
                 Time
               </label>
-              <select id="eq-visit-time" name="visit_time" required defaultValue="" className="input">
-                <option value="" disabled>
-                  Choose
-                </option>
-                {VISIT_SLOTS.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              <Dropdown id="eq-visit-time" name="visit_time" variant="field" label="Time" required placeholder="Choose" options={VISIT_SLOTS} />
             </div>
             <p className="col-span-2 text-xs text-zinc-500">This is a request. Our team will call to confirm the time.</p>
           </div>

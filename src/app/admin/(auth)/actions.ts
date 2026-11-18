@@ -141,7 +141,7 @@ export async function requestPasswordReset(rawEmail: string): Promise<{ ok: true
     expires_at: new Date(Date.now() + RESET_MINUTES * 60_000),
   });
   try {
-    await sendMail({ to: user.email, ...passwordResetEmail({ name: user.name, code, minutes: RESET_MINUTES }) });
+    await sendMail({ to: user.email, ...(await passwordResetEmail({ name: user.name, code, minutes: RESET_MINUTES })) });
   } catch (e) {
     console.error("[reset] email failed", e);
   }
@@ -220,6 +220,6 @@ export async function resetPassword(rawEmail: string, token: string, password: s
     await tx.run("DELETE FROM auth_attempts WHERE kind = 'admin_password' AND identifier = ? AND success = 0", [email]);
   });
   await logActivity({ entityType: "user", entityId: user.id, action: "password_reset", actorType: "admin", actorId: user.id });
-  await sendMail({ to: user.email, ...passwordChangedEmail({ name: user.name }) }).catch((e) => console.error("[reset] notice failed", e));
+  await sendMail({ to: user.email, ...(await passwordChangedEmail({ name: user.name })) }).catch((e) => console.error("[reset] notice failed", e));
   return { ok: true };
 }

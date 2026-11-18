@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { Dropdown } from "@/components/Dropdown";
 import { DOCUMENT_LIMITS, DOCUMENT_TYPES, documentTypeLabel } from "@/lib/constants";
 import { compressImage } from "@/lib/compress";
 import { deleteOwnDocument, uploadListingDocument } from "@/app/(site)/manage/actions";
@@ -85,13 +86,14 @@ export function OwnerDocuments({ propertyId, docs, canAdd }: { propertyId: strin
             <label className="label" htmlFor="owner-doc-type">
               Document type
             </label>
-            <select id="owner-doc-type" className="input" value={type} onChange={(e) => setType(e.target.value as DocumentType)}>
-              {DOCUMENT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
+            <Dropdown
+              id="owner-doc-type"
+              variant="field"
+              label="Document type"
+              value={type}
+              onChange={(v) => setType(v as DocumentType)}
+              options={DOCUMENT_TYPES}
+            />
           </div>
           <label className={`btn-secondary cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}>
             {busy ? "Uploading…" : "Add document"}

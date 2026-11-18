@@ -1,7 +1,8 @@
 "use client";
 
 import { PasswordInput } from "@/components/admin/PasswordInput";
-import { useActionState, useState } from "react";
+import { Dropdown } from "@/components/Dropdown";
+import { useActionState, useId, useState } from "react";
 import { addClientActivity, changeClientStatus, changeOwnPassword, replyToEnquiry, saveAgent, saveClient, sendAgentWelcome } from "@/app/admin/crm-actions";
 import { ACTIVITY_TYPES, AGENT_TYPES, CLIENT_SOURCES, CLIENT_STATUSES, CLIENT_TYPES } from "@/lib/crm-constants";
 import { PROPERTY_TYPES } from "@/lib/constants";
@@ -34,6 +35,7 @@ export function ClientForm({
   const [state, action, pending] = useActionState(saveClient, null);
   const brokers = staff.filter((s) => s.agent_type === "broker");
   const assignable = staff.filter((s) => s.agent_type !== "broker");
+  const formId = useId();
   return (
     <form action={action} className="grid gap-x-4 gap-y-4 sm:grid-cols-2">
       {client && <input type="hidden" name="id" value={client.id} />}
@@ -50,31 +52,26 @@ export function ClientForm({
       <Field label="Email">
         <input name="email" type="email" defaultValue={client?.email ?? ""} className="input" />
       </Field>
-      <Field label="Client type">
-        <select name="type" defaultValue={client?.type ?? "buyer"} className="input">
-          {CLIENT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+      <Field label="Client type" htmlFor={`${formId}-type`}>
+        <Dropdown id={`${formId}-type`} variant="field" name="type" label="Client type" defaultValue={client?.type ?? "buyer"} options={CLIENT_TYPES} />
       </Field>
-      <Field label="Source">
-        <select name="source" defaultValue={client?.source ?? "phone"} className="input">
-          {CLIENT_SOURCES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+      <Field label="Source" htmlFor={`${formId}-source`}>
+        <Dropdown id={`${formId}-source`} variant="field" name="source" label="Source" defaultValue={client?.source ?? "phone"} options={CLIENT_SOURCES} />
       </Field>
       <Caption>Requirement</Caption>
-      <Field label="Looking to">
-        <select name="listing_type" defaultValue={client?.listing_type ?? ""} className="input">
-          <option value="">—</option>
-          <option value="sale">Buy / sell</option>
-          <option value="rent">Rent</option>
-        </select>
+      <Field label="Looking to" htmlFor={`${formId}-listing`}>
+        <Dropdown
+          id={`${formId}-listing`}
+          variant="field"
+          name="listing_type"
+          label="Looking to"
+          defaultValue={client?.listing_type ?? ""}
+          options={[
+            { value: "", label: "—" },
+            { value: "sale", label: "Buy / sell" },
+            { value: "rent", label: "Rent" },
+          ]}
+        />
       </Field>
       <Field label="Bedrooms (min)">
         <input name="bedrooms" type="number" min={0} max={20} defaultValue={client?.bedrooms ?? ""} className="input" />
@@ -104,26 +101,28 @@ export function ClientForm({
       </fieldset>
       <Caption>Assignment</Caption>
       {isAdmin && (
-        <Field label="Assigned agent">
-          <select name="assigned_to" defaultValue={client?.assigned_to ?? ""} className="input">
-            <option value="">Unassigned</option>
-            {assignable.map((s) => (
-              <option key={s.id} value={s.id}>
-                {staffLabel(s)}
-              </option>
-            ))}
-          </select>
+        <Field label="Assigned agent" htmlFor={`${formId}-assigned`}>
+          <Dropdown
+            id={`${formId}-assigned`}
+            variant="field"
+            name="assigned_to"
+            label="Assigned agent"
+            defaultValue={client?.assigned_to ?? ""}
+            options={[{ value: "", label: "Unassigned" }, ...assignable.map((s) => ({ value: s.id, label: staffLabel(s) }))]}
+            searchable={assignable.length > 8}
+          />
         </Field>
       )}
-      <Field label="Referred by broker">
-        <select name="broker_id" defaultValue={client?.broker_id ?? ""} className="input">
-          <option value="">None</option>
-          {brokers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {staffLabel(s)}
-            </option>
-          ))}
-        </select>
+      <Field label="Referred by broker" htmlFor={`${formId}-broker`}>
+        <Dropdown
+          id={`${formId}-broker`}
+          variant="field"
+          name="broker_id"
+          label="Referred by broker"
+          defaultValue={client?.broker_id ?? ""}
+          options={[{ value: "", label: "None" }, ...brokers.map((s) => ({ value: s.id, label: staffLabel(s) }))]}
+          searchable={brokers.length > 8}
+        />
       </Field>
       <Field label="Next follow-up">
         <input name="next_follow_up" type="datetime-local" defaultValue={followUpValue ?? ""} className="input" />
@@ -150,7 +149,18 @@ function Caption({ children, first }: { children: React.ReactNode; first?: boole
   );
 }
 
-function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({ label, children, className = "", htmlFor }: { label: string; children: React.ReactNode; className?: string; htmlFor?: string }) {
+  // A wrapping <label> would re-click a Dropdown's trigger when an option inside it is picked.
+  if (htmlFor) {
+    return (
+      <div className={className}>
+        <label htmlFor={htmlFor} className="label">
+          {label}
+        </label>
+        {children}
+      </div>
+    );
+  }
   return (
     <label className={`block ${className}`}>
       <span className="label">{label}</span>
@@ -203,31 +213,39 @@ export function StatusForm({ client }: { client: Pick<Client, "id" | "status" | 
 // ---------------------------------------------------------------------------
 
 export function ActivityForm({ clientId, properties }: { clientId: string; properties: { id: string; label: string }[] }) {
+  const [resetKey, setResetKey] = useState(0);
   const [state, action, pending] = useActionState(async (prev: ActionState, fd: FormData) => {
     const res = await addClientActivity(prev, fd);
-    if (res?.ok) (document.getElementById(`activity-${clientId}`) as HTMLFormElement | null)?.reset();
+    if (res?.ok) {
+      (document.getElementById(`activity-${clientId}`) as HTMLFormElement | null)?.reset();
+      // form.reset() doesn't reach the Dropdowns' state; remount them instead.
+      setResetKey((k) => k + 1);
+    }
     return res;
   }, null);
   return (
     <form id={`activity-${clientId}`} action={action} className="space-y-3">
       <input type="hidden" name="client_id" value={clientId} />
-      <div className="flex flex-wrap gap-2.5">
-        <select name="type" defaultValue="call" className="input w-auto font-semibold">
-          {ACTIVITY_TYPES.filter((t) => t.loggable).map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+      <div key={resetKey} className="flex flex-wrap gap-2.5">
+        <Dropdown
+          variant="field"
+          name="type"
+          label="Activity type"
+          defaultValue="call"
+          options={ACTIVITY_TYPES.filter((t) => t.loggable)}
+          className="w-auto"
+          buttonClassName="font-semibold"
+        />
         {properties.length > 0 && (
-          <select name="property_id" defaultValue="" className="input w-auto min-w-0 flex-1">
-            <option value="">About a listing (optional)</option>
-            {properties.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            variant="field"
+            name="property_id"
+            label="About a listing"
+            defaultValue=""
+            options={[{ value: "", label: "About a listing (optional)" }, ...properties.map((p) => ({ value: p.id, label: p.label }))]}
+            searchable={properties.length > 8}
+            className="min-w-0 flex-1"
+          />
         )}
       </div>
       <textarea name="body" rows={2} required placeholder="What happened? e.g. Called, wants a site visit on Saturday." className="input" />
@@ -279,6 +297,7 @@ export function ReplyForm({ enquiryId }: { enquiryId: string }) {
 export function AgentForm({ agent, mailReady }: { agent?: Agent; mailReady: boolean }) {
   const [state, action, pending] = useActionState(saveAgent, null);
   const [role, setRole] = useState<"agent" | "admin">(agent?.role ?? "agent");
+  const formId = useId();
   return (
     <form action={action} className="grid gap-3 sm:grid-cols-2">
       {agent && <input type="hidden" name="id" value={agent.id} />}
@@ -288,21 +307,23 @@ export function AgentForm({ agent, mailReady }: { agent?: Agent; mailReady: bool
       <Field label="Email (sign-in)">
         <input name="email" type="email" defaultValue={agent?.email ?? ""} className="input" placeholder="Leave empty for a record without login" />
       </Field>
-      <Field label="Access">
-        <select name="role" value={role} onChange={(e) => setRole(e.target.value as "agent" | "admin")} className="input">
-          <option value="agent">Agent – own clients only</option>
-          <option value="admin">Admin – everything</option>
-        </select>
+      <Field label="Access" htmlFor={`${formId}-role`}>
+        <Dropdown
+          id={`${formId}-role`}
+          variant="field"
+          name="role"
+          label="Access"
+          value={role}
+          onChange={(v) => setRole(v as "agent" | "admin")}
+          options={[
+            { value: "agent", label: "Agent – own clients only" },
+            { value: "admin", label: "Admin – everything" },
+          ]}
+        />
       </Field>
       {role === "agent" && (
-        <Field label="Type">
-          <select name="agent_type" defaultValue={agent?.agent_type ?? "agent"} className="input">
-            {AGENT_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+        <Field label="Type" htmlFor={`${formId}-agent-type`}>
+          <Dropdown id={`${formId}-agent-type`} variant="field" name="agent_type" label="Type" defaultValue={agent?.agent_type ?? "agent"} options={AGENT_TYPES} />
         </Field>
       )}
       <Field label="Phone">

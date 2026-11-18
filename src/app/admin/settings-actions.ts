@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireStaff } from "@/lib/auth";
 import { diffFields, logActivity, SETTINGS_ENTITY_ID } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { isSettableEnv, writeEnv, type SettableEnvName } from "@/lib/env";
+import { SITE_FIELDS, savedSiteDetails } from "@/lib/site-settings";
 import { mailConfigured, sendMail, testEmail, mailErrorReason } from "@/lib/mail";
 import type { ActionState } from "@/lib/types";
 
@@ -74,7 +75,7 @@ export async function sendTestEmail(): Promise<ActionState> {
     return { ok: false, error: "Email is not configured: set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER and SMTP_PASS in Settings → Environment variables." };
   }
   try {
-    await sendMail({ to: staff.email, ...testEmail({ name: staff.name }) });
+    await sendMail({ to: staff.email, ...(await testEmail({ name: staff.name })) });
   } catch (e) {
     console.error("[mail] test email failed", e);
     return { ok: false, error: `Not sent: ${mailErrorReason(e)}.` };
@@ -118,4 +119,35 @@ export async function saveEnvVariables(input: { set: Record<string, string>; rem
   const set = changes.filter(([, v]) => v !== null).length;
   const removed = changes.length - set;
   return { ok: true, message: `Saved. ${set ? `${set} set` : ""}${set && removed ? ", " : ""}${removed ? `${removed} removed` : ""}. Takes effect within 15 seconds, no redeploy needed.` };
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Settings → Organization → Website details. An empty field falls back to the server's NEXT_PUBLIC_* value. */
+export async function saveSiteDetails(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+  const values = SITE_FIELDS.map((f) => [f.key, str(formData, f.key)] as const);
+  for (const [key, value] of values) {
+    if (value.length > (key === "address" ? 300 : 120)) return { ok: false, error: `${key === "address" ? "Office address" : "Each field"} is too long.` };
+  }
+  const get = (k: string) => values.find(([key]) => key === k)?.[1] ?? "";
+  if (get("name") && get("name").length < 2) return { ok: false, error: "Brand name must be at least 2 characters." };
+  if (get("email") && !EMAIL.test(get("email"))) return { ok: false, error: "Email doesn't look right." };
+  const wa = get("whatsapp").replace(/\D/g, "");
+  if (get("whatsapp") && !/^\d{10,15}$/.test(wa)) return { ok: false, error: "WhatsApp must be 10–15 digits with country code, e.g. 919845012345." };
+  if (get("phone") && !/^[0-9+()\-\s]{6,20}$/.test(get("phone"))) return { ok: false, error: "Phone may contain only digits, spaces, +, - and brackets." };
+
+  const before = await savedSiteDetails();
+  for (const [key, raw] of values) {
+    const value = key === "whatsapp" ? wa : raw;
+    if (value) await db.run("INSERT INTO app_config (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [`site:${key}`, value]);
+    else await db.run("DELETE FROM app_config WHERE name = ?", [`site:${key}`]);
+  }
+  const changes = diffFields(before, Object.fromEntries(values.filter(([, v]) => v).map(([k, v]) => [k, k === "whatsapp" ? wa : v])));
+  if (Object.keys(changes).length) {
+    await logActivity({ entityType: "settings", entityId: SETTINGS_ENTITY_ID, action: "site_details_changed", actorType: "admin", actorId: admin.userId, diff: changes });
+  }
+  updateTag("site");
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Website details saved. Every page shows them now." };
 }

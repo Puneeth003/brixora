@@ -1,7 +1,7 @@
 import { checkAdmin } from "@/lib/auth";
 import { ACTION_FILTERS, ADMIN_ENTITIES, KINDS, feedRange, parseFeedFilters, type FeedFilters } from "@/lib/activity-feed";
 import { configValue, db } from "@/lib/db";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 import { excelDateTime, reportWorkbook, type ReportColumn } from "@/lib/xlsx";
 import { describe, feedRows, istDateTime, type FeedRow } from "../feed";
 
@@ -106,6 +106,7 @@ export async function GET(request: Request) {
     });
   }
 
+  const site = await getSite();
   const workbook = reportWorkbook({
     sheetName: "Activity",
     title: `${site.name} · Activity report`,

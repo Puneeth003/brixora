@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { connectWhatsApp, disconnectWhatsApp } from "@/app/admin/whatsapp-actions";
+import { useConfirm } from "@/components/ConfirmDialog";
 import type { ActionState } from "@/lib/types";
 
 // Meta Embedded Signup in "WhatsApp Business app" mode (coexistence): the admin logs in
@@ -59,6 +60,7 @@ function Status({ state }: { state: ActionState }) {
 export function WhatsAppConnect({ appId, configId, version, connected }: { appId: string; configId: string; version: string; connected: boolean }) {
   const [state, setState] = useState<ActionState>(null);
   const [pending, startTransition] = useTransition();
+  const [confirm, confirmDialog] = useConfirm();
   const [busy, setBusy] = useState(false);
   const signup = useRef<{
     code?: string;
@@ -167,8 +169,14 @@ export function WhatsAppConnect({ appId, configId, version, connected }: { appId
     if (signup.current.errorTimer) clearTimeout(signup.current.errorTimer);
   }, []);
 
-  function disconnect() {
-    if (!confirm("Disconnect this number from the website? The WhatsApp Business app on the phone keeps working.")) return;
+  async function disconnect() {
+    const ok = await confirm({
+      title: "Disconnect this number?",
+      message: "The website stops sending from it. The WhatsApp Business app on the phone keeps working.",
+      confirmLabel: "Disconnect",
+      danger: true,
+    });
+    if (!ok) return;
     startTransition(async () => setState(await disconnectWhatsApp()));
   }
 
@@ -186,6 +194,7 @@ export function WhatsAppConnect({ appId, configId, version, connected }: { appId
         )}
       </div>
       <Status state={state} />
+      {confirmDialog}
     </div>
   );
 }

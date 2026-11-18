@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { saveBuilder, saveProject } from "@/app/admin/actions";
+import { Dropdown } from "@/components/Dropdown";
 import type { Builder, Project } from "@/lib/types";
 
 function Status({ state }: { state: { ok: boolean; error?: string; message?: string } | null }) {
@@ -59,16 +60,16 @@ export function ProjectForm({ project, builders }: { project?: Project; builders
         <input name="name" defaultValue={project?.name} placeholder="Project name" required className="input" />
       </Field>
       <Field label="Builder">
-        <select name="builder_id" defaultValue={project?.builder_id ?? ""} required className="input">
-          <option value="" disabled>
-            Builder…
-          </option>
-          {builders.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
+        <Dropdown
+          name="builder_id"
+          label="Builder"
+          variant="field"
+          defaultValue={project?.builder_id ?? ""}
+          required
+          placeholder="Builder…"
+          searchable={builders.length > 8}
+          options={builders.map((b) => ({ value: b.id, label: b.name }))}
+        />
       </Field>
       <Field label="Locality">
         <input name="locality" defaultValue={project?.locality ?? ""} placeholder="Locality" className="input" />
@@ -77,11 +78,17 @@ export function ProjectForm({ project, builders }: { project?: Project; builders
         <input name="rera_no" defaultValue={project?.rera_no ?? ""} placeholder="RERA project no." className="input" />
       </Field>
       <Field label="Status">
-        <select name="status" defaultValue={project?.status ?? "under_construction"} className="input">
-          <option value="upcoming">Upcoming</option>
-          <option value="under_construction">Under construction</option>
-          <option value="ready">Ready to move</option>
-        </select>
+        <Dropdown
+          name="status"
+          label="Status"
+          variant="field"
+          defaultValue={project?.status ?? "under_construction"}
+          options={[
+            { value: "upcoming", label: "Upcoming" },
+            { value: "under_construction", label: "Under construction" },
+            { value: "ready", label: "Ready to move" },
+          ]}
+        />
       </Field>
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
         <button className="btn-primary" disabled={pending || !builders.length}>

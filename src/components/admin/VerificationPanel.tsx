@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { cancelVerification, scheduleVerification } from "@/app/admin/verification-actions";
+import { Dropdown } from "@/components/Dropdown";
 import { istInputValue } from "@/lib/time";
 
 type OpenVisit = { id: string; scheduled_at: string | null; assigned_to: string | null; assignee_name: string | null };
@@ -69,16 +70,17 @@ export function VerificationPanel({
         <label className="label" htmlFor="visit_who">
           Who visits
         </label>
-        <select id="visit_who" name="assigned_to" required defaultValue={who} className="input">
-          <option value="" disabled>
-            Choose staff…
-          </option>
-          {staff.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name ?? s.email ?? "Staff"}
-            </option>
-          ))}
-        </select>
+        <Dropdown
+          id="visit_who"
+          name="assigned_to"
+          label="Who visits"
+          variant="field"
+          required
+          defaultValue={who}
+          placeholder="Choose staff…"
+          searchable={staff.length > 8}
+          options={staff.map((s) => ({ value: s.id, label: s.name ?? s.email ?? "Staff" }))}
+        />
       </div>
     </>
   );

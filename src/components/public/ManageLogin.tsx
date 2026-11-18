@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { PhoneOtp } from "@/components/PhoneOtp";
-import { OrDivider } from "@/components/AuthScene";
+import { OrDivider } from "@/components/OrDivider";
 
 /**
  * Member sign-in card content (sits inside AuthScene). Signing in and creating an

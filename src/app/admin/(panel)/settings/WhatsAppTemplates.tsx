@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { saveTemplateSettings, sendTemplateTestAction } from "@/app/admin/whatsapp-actions";
+import { Dropdown } from "@/components/Dropdown";
 import type { ActionState } from "@/lib/types";
 import type { MetaTemplate } from "@/lib/whatsapp";
 
@@ -118,22 +119,24 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
                   <label className="label" htmlFor={`tpl-${r.key}`}>
                     Template in Meta
                   </label>
-                  <select
+                  <Dropdown
                     id={`tpl-${r.key}`}
+                    label="Template in Meta"
+                    variant="field"
                     value={t ? `${t.name}|${t.language}` : ""}
-                    onChange={(e) => {
-                      const [name, lang] = e.target.value.split("|");
+                    onChange={(v) => {
+                      const [name, lang] = v.split("|");
                       if (name) update(r.key, { name, lang });
                     }}
-                    className="input font-mono text-xs"
-                  >
-                    {!t && <option value="">{`${r.name} (${r.lang}) is not in Meta. Choose one…`}</option>}
-                    {meta.map((m) => (
-                      <option key={`${m.name}|${m.language}`} value={`${m.name}|${m.language}`}>
-                        {m.name} · {m.language} · {m.status.toLowerCase()}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={`${r.name} (${r.lang}) is not in Meta. Choose one…`}
+                    searchable={meta.length > 8}
+                    searchPlaceholder="Search templates…"
+                    options={meta.map((m) => ({
+                      value: `${m.name}|${m.language}`,
+                      label: `${m.name} · ${m.language} · ${m.status.toLowerCase()}`,
+                    }))}
+                    buttonClassName="font-mono text-xs"
+                  />
                 </div>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

@@ -8,6 +8,7 @@ import { normalizeIndianPhone, displayPhone, formatDate } from "@/lib/format";
 import { CLIENT_STATUSES, CLIENT_TYPES } from "@/lib/crm-constants";
 import { fromNow, nowMs } from "@/lib/time";
 import { Empty, PageHeader, Table, Tabs } from "@/components/admin/ui";
+import { Dropdown } from "@/components/Dropdown";
 import { ClientStatusBadge, FollowUp, requirementSummary } from "@/components/crm/ClientBadges";
 import type { Client } from "@/lib/types";
 
@@ -93,26 +94,31 @@ export default async function ClientsPage({ searchParams }: PageProps<"/admin/cl
       <form className="card mb-5 flex flex-wrap items-center gap-2.5 p-3 sm:p-4">
         <input type="hidden" name="tab" value={active} />
         <input name="q" defaultValue={q} placeholder="Search name, phone, email, locality" className="input min-w-0 flex-1 sm:max-w-sm" />
-        <select name="type" defaultValue={type} className="input w-auto">
-          <option value="">All types</option>
-          {CLIENT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+        <Dropdown
+          name="type"
+          label="Type"
+          variant="field"
+          defaultValue={type}
+          options={[{ value: "", label: "All types" }, ...CLIENT_TYPES.map((t) => ({ value: t.value, label: t.label }))]}
+          className="w-auto min-w-40"
+        />
         {staff.role === "admin" && (
-          <select name="agent" defaultValue={agent} className="input w-auto">
-            <option value="">All agents</option>
-            <option value="none">Unassigned</option>
-            {staffList
-              .filter((s) => s.agent_type !== "broker")
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name ?? s.email}
-                </option>
-              ))}
-          </select>
+          <Dropdown
+            name="agent"
+            label="Agent"
+            variant="field"
+            defaultValue={agent}
+            searchable
+            searchPlaceholder="Search agents…"
+            options={[
+              { value: "", label: "All agents" },
+              { value: "none", label: "Unassigned" },
+              ...staffList
+                .filter((s) => s.agent_type !== "broker")
+                .map((s) => ({ value: String(s.id), label: s.name ?? s.email ?? "" })),
+            ]}
+            className="w-auto min-w-44"
+          />
         )}
         <button className="btn-primary ml-auto px-5">Filter</button>
       </form>

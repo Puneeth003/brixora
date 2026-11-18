@@ -1,14 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
-import { site, whatsappLink } from "@/lib/site";
+import { getSite, whatsappLinkFor } from "@/lib/site-settings";
 import { PhoneIcon } from "@/components/icons";
 import { HeaderMobileMenu, HeaderProfile } from "./HeaderProfile";
 import { MobileMenuFallback, NavLinks } from "./NavLinks";
 import { ProfileFallback } from "./ProfileMenu";
 
 /** Brand artwork from public/brand (green/gold wordmark). `light` = for dark backgrounds. */
-export function BrandLogo({ light = false, tagline = false }: { light?: boolean; tagline?: boolean }) {
+export async function BrandLogo({ light = false, tagline = false }: { light?: boolean; tagline?: boolean }) {
+  const site = await getSite();
   return (
     <Link href="/" className="flex items-center" aria-label={`${site.name} home`}>
       <Image
@@ -23,9 +24,10 @@ export function BrandLogo({ light = false, tagline = false }: { light?: boolean;
   );
 }
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const site = await getSite();
   const contact =
-    whatsappLink(`Hi ${site.name}, I'd like to talk about a property in ${site.defaultCity}.`) ??
+    whatsappLinkFor(site, `Hi ${site.name}, I'd like to talk about a property in ${site.defaultCity}.`) ??
     (site.brokerage.phone ? `tel:+${site.brokerage.phone.replace(/\D/g, "")}` : "/#contact");
 
   return (

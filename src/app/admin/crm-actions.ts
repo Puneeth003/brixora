@@ -401,7 +401,7 @@ async function sendInvite(userId: string): Promise<InviteResult> {
   const skipped: string[] = [];
 
   try {
-    const how = await sendMail({ to: u.email, ...welcomeEmail({ name: u.name, email: u.email, link }) });
+    const how = await sendMail({ to: u.email, ...(await welcomeEmail({ name: u.name, email: u.email, link })) });
     if (how === "sent") done.push(`email to ${u.email}`);
     else failed.push("email: not set up here, so it was only printed in the dev server terminal");
   } catch (e) {
@@ -530,7 +530,7 @@ export async function changeOwnPassword(_prev: ActionState, formData: FormData):
   await db.run("DELETE FROM sessions WHERE user_id = ?", [staff.userId]);
   await logActivity({ entityType: "user", entityId: staff.userId, action: "password_changed", actorType: "admin", actorId: staff.userId });
   if ((await mailConfigured()) || process.env.NODE_ENV !== "production") {
-    await sendMail({ to: staff.email, ...passwordChangedEmail({ name: u?.name ?? null }) }).catch(() => {});
+    await sendMail({ to: staff.email, ...(await passwordChangedEmail({ name: u?.name ?? null })) }).catch(() => {});
   }
   await endSession("admin");
   redirect("/admin/login");

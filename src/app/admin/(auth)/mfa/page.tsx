@@ -5,7 +5,7 @@ import QRCode from "qrcode";
 import { checkStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { authSecretConfigured, encrypt, newTotpSecret, totpUri, tryDecrypt } from "@/lib/crypto";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 import { adminSignOut } from "../../actions";
 import { MfaForm } from "./MfaForm";
 
@@ -70,6 +70,7 @@ async function Content() {
     secret = newTotpSecret();
     await db.update("users", { totp_secret: encrypt(secret), totp_enabled: false }, "id = ?", [check.userId]);
   }
+  const site = await getSite();
   const qr = await QRCode.toDataURL(totpUri(secret, check.email, `${site.name} Admin`), { margin: 1, width: 384 });
   return <MfaForm setup={{ qr, secret: secret.match(/.{1,4}/g)!.join(" ") }} />;
 }

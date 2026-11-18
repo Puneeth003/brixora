@@ -2,14 +2,14 @@ import "server-only";
 import sharp, { type OutputInfo } from "sharp";
 import { putFile, removeFile } from "./storage";
 import { PHOTO_LIMITS } from "./constants";
-import { site } from "./site";
+import { getSite } from "./site-settings";
 
 const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
 const MAX_EDGE = 1600;
 
-function watermarkSvg(width: number, height: number) {
+function watermarkSvg(width: number, height: number, brandName: string) {
   const fontSize = Math.round(Math.max(18, width / 22));
-  const label = site.name.toUpperCase();
+  const label = brandName.toUpperCase().replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   // Bottom-right brand mark plus a faint centred mark so crops still carry it.
   return Buffer.from(`
     <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
@@ -47,8 +47,9 @@ export async function processAndStore(file: File, propertyId: string) {
     throw new ImageError("That file doesn't look like a valid photo.");
   }
 
+  const site = await getSite();
   const watermarked = await sharp(resized)
-    .composite([{ input: watermarkSvg(info.width, info.height), top: 0, left: 0 }])
+    .composite([{ input: watermarkSvg(info.width, info.height, site.name), top: 0, left: 0 }])
     .webp({ quality: 80 })
     .toBuffer();
 

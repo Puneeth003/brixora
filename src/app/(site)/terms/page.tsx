@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 
-export const metadata: Metadata = {
-  title: "Terms of use",
-  description: `The terms for using ${site.name} to list, find and enquire about properties.`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSite();
+  return {
+    title: "Terms of use",
+    description: `The terms for using ${site.name} to list, find and enquire about properties.`,
+  };
+}
 
 const LAST_UPDATED = "6 November 2026";
 
-export default function TermsPage() {
+export default async function TermsPage() {
+  const site = await getSite();
   const { email, phone, address } = site.brokerage;
   const contact = email || phone || "our office";
   return (

@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AMENITIES, DOCUMENT_LIMITS, DOCUMENT_TYPES, FURNISHING, PHOTO_LIMITS, PROPERTY_TYPES, isResidential } from "@/lib/constants";
 import { compressImage } from "@/lib/compress";
+import { Dropdown } from "@/components/Dropdown";
 import { PhoneOtp } from "@/components/PhoneOtp";
 import { LocationPicker, type Pin } from "@/components/public/LocationPicker";
-import { site } from "@/lib/site";
 import { createDraft, finalizeSubmission, uploadDraftDocument, uploadDraftPhoto } from "@/app/(site)/post/actions";
 import { clearDraft, loadDraft, loadPhotos, saveDraft, savePhotos } from "@/lib/post-draft";
 import type { DocumentType } from "@/lib/types";
@@ -68,7 +68,7 @@ type Doc = { id: string; file: File; type: DocumentType };
 
 export type PostPrefill = { listing_type?: "sale" | "rent"; property_type?: string; locality?: string; price?: string };
 
-export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string; prefill?: PostPrefill }) {
+export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCity: string; brandName: string; prefill?: PostPrefill }) {
   // Coming from the home page "Sell" tab: type is already chosen, so start at Location.
   const [step, setStep] = useState<number>(prefill.property_type ? S.location : S.type);
   const [form, setForm] = useState<Form>({
@@ -507,20 +507,22 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
               {residential && (
                 <>
                   <Field label="Bedrooms" required>
-                    <select className="input" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)}>
-                      <option value="">—</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                        <option key={n}>{n}</option>
-                      ))}
-                    </select>
+                    <Dropdown
+                      variant="field"
+                      label="Bedrooms"
+                      value={form.bedrooms}
+                      onChange={(v) => set("bedrooms", v)}
+                      options={[{ value: "", label: "—" }, ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ value: String(n), label: String(n) }))]}
+                    />
                   </Field>
                   <Field label="Bathrooms">
-                    <select className="input" value={form.bathrooms} onChange={(e) => set("bathrooms", e.target.value)}>
-                      <option value="">—</option>
-                      {[1, 2, 3, 4, 5, 6].map((n) => (
-                        <option key={n}>{n}</option>
-                      ))}
-                    </select>
+                    <Dropdown
+                      variant="field"
+                      label="Bathrooms"
+                      value={form.bathrooms}
+                      onChange={(v) => set("bathrooms", v)}
+                      options={[{ value: "", label: "—" }, ...[1, 2, 3, 4, 5, 6].map((n) => ({ value: String(n), label: String(n) }))]}
+                    />
                   </Field>
                 </>
               )}
@@ -534,14 +536,13 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
               </Field>
               {residential && (
                 <Field label="Furnishing">
-                  <select className="input" value={form.furnishing} onChange={(e) => set("furnishing", e.target.value)}>
-                    <option value="">—</option>
-                    {FURNISHING.map((f) => (
-                      <option key={f.value} value={f.value}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Dropdown
+                    variant="field"
+                    label="Furnishing"
+                    value={form.furnishing}
+                    onChange={(v) => set("furnishing", v)}
+                    options={[{ value: "", label: "—" }, ...FURNISHING]}
+                  />
                 </Field>
               )}
               {form.property_type !== "plot" && (
@@ -701,13 +702,14 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
                   <label className="label" htmlFor="doc-type">
                     Document type
                   </label>
-                  <select id="doc-type" className="input" value={docType} onChange={(e) => setDocType(e.target.value as DocumentType)}>
-                    {DOCUMENT_TYPES.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Dropdown
+                    id="doc-type"
+                    variant="field"
+                    label="Document type"
+                    value={docType}
+                    onChange={(v) => setDocType(v as DocumentType)}
+                    options={DOCUMENT_TYPES}
+                  />
                 </div>
                 <label className="btn-secondary cursor-pointer">
                   Add file
@@ -758,13 +760,13 @@ export function PostWizard({ defaultCity, prefill = {} }: { defaultCity: string;
                   className="mt-0.5 size-4 shrink-0 accent-brand-600"
                 />
                 <span>
-                  I agree that {site.name} lists this property for me and handles every buyer or tenant enquiry. My number and address
+                  I agree that {brandName} lists this property for me and handles every buyer or tenant enquiry. My number and address
                   are not shared with them.
                 </span>
               </label>
             </div>
             <p className="text-sm text-zinc-500">
-              By submitting you agree that {site.name} may contact you on WhatsApp about this listing. See our{" "}
+              By submitting you agree that {brandName} may contact you on WhatsApp about this listing. See our{" "}
               <Link href="/privacy" className="underline">
                 privacy policy
               </Link>

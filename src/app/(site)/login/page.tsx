@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getOwner } from "@/lib/auth";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 import { AuthScene } from "@/components/AuthScene";
 import { ManageLogin } from "@/components/public/ManageLogin";
 
 export const metadata: Metadata = { title: "Log in", robots: { index: false } };
 
-export default function LoginPage({ searchParams }: PageProps<"/login">) {
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const site = await getSite();
   return (
     <AuthScene
       logo={false}

@@ -8,6 +8,7 @@ import { CLIENT_STATUSES } from "@/lib/crm-constants";
 import { nowMs, startOfMonthIst, startOfTodayIstIso } from "@/lib/time";
 import { Empty, PageHeader, SectionHeading, StatCard } from "@/components/admin/ui";
 import { requirementSummary } from "@/components/crm/ClientBadges";
+import { Dropdown } from "@/components/Dropdown";
 import { assignClient } from "../../workload-actions";
 import type { Client, ClientStatus } from "@/lib/types";
 
@@ -164,16 +165,18 @@ export default async function WorkloadPage() {
               {agents.length > 0 && (
                 <form action={assignClient} className="flex items-center gap-2">
                   <input type="hidden" name="client_id" value={c.id} />
-                  <select name="agent_id" required defaultValue="" aria-label={`Agent for ${c.name}`} className="input w-auto py-1.5 text-sm">
-                    <option value="" disabled>
-                      Choose agent
-                    </option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name ?? a.email} ({a.stats.open})
-                      </option>
-                    ))}
-                  </select>
+                  <Dropdown
+                    name="agent_id"
+                    label={`Agent for ${c.name}`}
+                    variant="field"
+                    required
+                    placeholder="Choose agent"
+                    searchable={agents.length > 8}
+                    searchPlaceholder="Search agents…"
+                    options={agents.map((a) => ({ value: String(a.id), label: `${a.name ?? a.email} (${a.stats.open})` }))}
+                    className="w-auto min-w-44"
+                    buttonClassName="py-1.5 text-sm"
+                  />
                   <button className="btn-primary px-4 py-1.5 text-sm">Assign</button>
                 </form>
               )}

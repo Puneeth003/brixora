@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { getLocalities, getPriceStats, getPublicListings } from "@/lib/queries";
 import { LocalityPrices } from "@/components/public/PriceFigures";
 import { slugify } from "@/lib/format";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 import { PropertyCard, PropertyCardSkeleton } from "@/components/public/PropertyCard";
 import { LocalityMap } from "@/components/public/LocalityMap";
 
@@ -17,6 +17,7 @@ async function findLocality(slug: string) {
 export async function generateMetadata({ params }: PageProps<"/localities/[slug]">): Promise<Metadata> {
   const loc = await findLocality((await params).slug);
   if (!loc) return { title: "Locality not found" };
+  const site = await getSite();
   return {
     title: `Properties in ${loc.locality}, ${loc.city}`,
     description: `${loc.count} verified flats, villas, plots and commercial properties for sale and rent in ${loc.locality}, ${loc.city}. Listed by ${site.name}.`,
@@ -45,10 +46,11 @@ export default function LocalityPage({ params }: PageProps<"/localities/[slug]">
 async function Content({ params }: Pick<PageProps<"/localities/[slug]">, "params">) {
   const loc = await findLocality((await params).slug);
   if (!loc) notFound();
-  const [sale, rent, stats] = await Promise.all([
+  const [sale, rent, stats, site] = await Promise.all([
     getPublicListings({ locality: loc.locality, listing: "sale" }),
     getPublicListings({ locality: loc.locality, listing: "rent" }),
     getPriceStats(),
+    getSite(),
   ]);
 
   return (

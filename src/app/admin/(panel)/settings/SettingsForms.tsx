@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { saveOrganization, sendTestEmail, updateStaffProfile } from "@/app/admin/settings-actions";
+import { saveOrganization, saveSiteDetails, sendTestEmail, updateStaffProfile } from "@/app/admin/settings-actions";
 import type { ActionState } from "@/lib/types";
 
 function Status({ state }: { state: ActionState }) {
@@ -143,6 +143,47 @@ export function OrganizationForm({
       <div className="flex items-center gap-3">
         <button disabled={pending} className="btn-primary px-4 py-2 text-sm">
           {pending ? "Saving…" : "Save settings"}
+        </button>
+        <Status state={state} />
+      </div>
+    </form>
+  );
+}
+
+export type SiteDetailField = { key: string; label: string; hint: string; value: string; fallback: string };
+
+/** Brand name and public contact details. An empty field uses the server's value (shown as the placeholder). */
+export function SiteDetailsForm({ fields }: { fields: SiteDetailField[] }) {
+  const [state, action, pending] = useActionState(saveSiteDetails, null);
+  return (
+    <form action={action} className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        {fields.map((f) => (
+          <div key={f.key} className={f.key === "address" ? "sm:col-span-2" : ""}>
+            <label className="label" htmlFor={`site-${f.key}`}>
+              {f.label}
+            </label>
+            {f.key === "address" ? (
+              <textarea id={`site-${f.key}`} name={f.key} defaultValue={f.value} rows={2} maxLength={300} placeholder={f.fallback || f.hint} className="input" />
+            ) : (
+              <input
+                id={`site-${f.key}`}
+                name={f.key}
+                defaultValue={f.value}
+                maxLength={120}
+                type={f.key === "email" ? "email" : "text"}
+                inputMode={f.key === "phone" || f.key === "whatsapp" ? "tel" : undefined}
+                placeholder={f.fallback || f.hint}
+                className="input"
+              />
+            )}
+            <p className="mt-1 text-xs text-[var(--s-muted)]">{f.fallback && !f.value ? `Using the server's value. ${f.hint}` : f.hint}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <button disabled={pending} className="btn-primary px-4 py-2 text-sm">
+          {pending ? "Saving…" : "Save website details"}
         </button>
         <Status state={state} />
       </div>

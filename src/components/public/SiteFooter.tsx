@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { site, whatsappLink } from "@/lib/site";
+import { getSite, whatsappLinkFor } from "@/lib/site-settings";
 import { displayPhone } from "@/lib/format";
 import { MapPinIcon, PhoneIcon } from "@/components/icons";
 import { BrandLogo } from "./SiteHeader";
 
-export function SiteFooter() {
-  const wa = whatsappLink(`Hi ${site.name}, I'd like to know more about your properties.`);
+export async function SiteFooter() {
+  const site = await getSite();
+  const wa = whatsappLinkFor(site, `Hi ${site.name}, I'd like to know more about your properties.`);
   const linkCls = "text-zinc-400 transition hover:text-white";
   return (
     <footer id="contact" className="mt-16 bg-ink text-sm text-zinc-300">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { Dropdown } from "@/components/Dropdown";
 import { submitRequirement } from "@/app/(site)/requirements/actions";
 import { BHK_OPTIONS, PROPERTY_TYPES, RENT_BUDGETS, SALE_BUDGETS } from "@/lib/constants";
 import { MAX_REQUIREMENT_LOCALITIES } from "@/lib/requirement";
@@ -93,28 +94,27 @@ export function RequirementForm({ localities }: { localities: string[] }) {
           <label className="label" htmlFor="rq-bhk">
             Bedrooms
           </label>
-          <select id="rq-bhk" name="bhk" defaultValue="" className="input">
-            <option value="">Any</option>
-            {BHK_OPTIONS.map((n) => (
-              <option key={n} value={n}>
-                {n === 5 ? "5+ BHK" : `${n} BHK`}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            id="rq-bhk"
+            name="bhk"
+            variant="field"
+            label="Bedrooms"
+            options={[{ value: "", label: "Any" }, ...BHK_OPTIONS.map((n) => ({ value: String(n), label: n === 5 ? "5+ BHK" : `${n} BHK` }))]}
+          />
         </div>
         <div>
           <label className="label" htmlFor="rq-budget">
             Budget {looking === "rent" && <span className="font-normal text-zinc-400">(per month)</span>}
           </label>
           {/* Keyed so the choice resets when switching between buying and renting. */}
-          <select id="rq-budget" name="budget" defaultValue="" key={looking} className="input">
-            <option value="">Any budget</option>
-            {budgets.map((b) => (
-              <option key={b.value} value={b.value}>
-                {b.label}
-              </option>
-            ))}
-          </select>
+          <Dropdown
+            id="rq-budget"
+            name="budget"
+            key={looking}
+            variant="field"
+            label="Budget"
+            options={[{ value: "", label: "Any budget" }, ...budgets]}
+          />
         </div>
       </div>
 

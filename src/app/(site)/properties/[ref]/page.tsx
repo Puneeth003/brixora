@@ -7,7 +7,8 @@ import { checkPrice } from "@/lib/price-stats";
 import { PriceCheckNote } from "@/components/public/PriceFigures";
 import { formatDate, formatNumber, formatPrice, displayPhone } from "@/lib/format";
 import { furnishingLabel, propertyTypeLabel } from "@/lib/constants";
-import { propertyUrl, publicImageUrl, site, whatsappLink } from "@/lib/site";
+import { propertyUrl, publicImageUrl } from "@/lib/site";
+import { getSite, whatsappLinkFor } from "@/lib/site-settings";
 import { Gallery } from "@/components/public/Gallery";
 import { EmiCalculator } from "@/components/public/EmiCalculator";
 import { EnquiryForm } from "@/components/public/EnquiryForm";
@@ -49,13 +50,14 @@ async function Detail({ params }: Pick<PageProps<"/properties/[ref]">, "params">
   const { ref } = await params;
   const data = await getPublicProperty(ref);
   if (!data) notFound();
+  const site = await getSite();
   const { property: p, images, isNew, visitDates } = data;
   const perSqft = pricePerSqft(p);
   const priceCheck = perSqft ? checkPrice(await getPriceStats(), p) : null;
   const share = shareLinks({ title: p.title, priceText: formatPrice(p.price, p.listing_type), locality: `${p.locality}, ${p.city}`, url: propertyUrl(p.reference_no) });
 
   const gallery = images.map((i) => ({ id: i.id, url: publicImageUrl(i.watermarked_path)! }));
-  const wa = whatsappLink(`Hi ${site.name}, I'm interested in property ${p.reference_no}: ${propertyUrl(p.reference_no)}`);
+  const wa = whatsappLinkFor(site, `Hi ${site.name}, I'm interested in property ${p.reference_no}: ${propertyUrl(p.reference_no)}`);
 
   const facts: [string, string | null][] = [
     ["Type", propertyTypeLabel(p.property_type)],

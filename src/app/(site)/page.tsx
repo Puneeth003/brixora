@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getFeaturedListings, getListingStats, getLocalities } from "@/lib/queries";
-import { site, whatsappLink } from "@/lib/site";
+import { getSite, whatsappLinkFor } from "@/lib/site-settings";
 import { slugify } from "@/lib/format";
 import { PropertyCard } from "@/components/public/PropertyCard";
 import { HeroSearch } from "@/components/public/HeroSearch";
@@ -65,8 +65,8 @@ function SectionHeading({ eyebrow, line1, line2 }: { eyebrow: string; line1: str
 }
 
 export default async function Home() {
-  const [featured, localities, stats] = await Promise.all([getFeaturedListings(PAGE_SIZE), getLocalities(), getListingStats()]);
-  const wa = whatsappLink(`Hi ${site.name}, I'd like to list my property.`);
+  const [featured, localities, stats, site] = await Promise.all([getFeaturedListings(PAGE_SIZE), getLocalities(), getListingStats(), getSite()]);
+  const wa = whatsappLinkFor(site, `Hi ${site.name}, I'd like to list my property.`);
 
   return (
     <>

@@ -10,7 +10,8 @@ import { ChangePasswordForm } from "@/components/crm/forms";
 import { signOutAllStaff } from "@/app/admin/settings-actions";
 import { brokeragePhone, graphVersion, metaTemplates, normalizePhone, templateSettings, TEMPLATES, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
 import { formatDateTime } from "@/lib/format";
-import { OrganizationForm, ProfileForm, TestEmailForm } from "./SettingsForms";
+import { OrganizationForm, ProfileForm, SiteDetailsForm, TestEmailForm } from "./SettingsForms";
+import { SITE_FIELDS, savedSiteDetails } from "@/lib/site-settings";
 import { EnvVariables } from "./EnvVariables";
 import { WhatsAppConnect } from "./WhatsAppConnect";
 import { WhatsAppTemplates } from "./WhatsAppTemplates";
@@ -133,12 +134,13 @@ async function OrganizationSection() {
   const get = (name: string) => rows.find((r) => r.name === name)?.value;
   const hex = (v: string | undefined, fallback: string) => (v && /^#[0-9a-f]{6}$/i.test(v) ? v : fallback);
   const expiry = Number(get("listing_expiry_days"));
-  const details = [
-    { label: "Site name", value: site.name },
-    { label: "Phone", value: site.brokerage.phone },
-    { label: "WhatsApp", value: site.brokerage.whatsapp },
-    { label: "Email", value: site.brokerage.email },
-  ];
+  const saved = await savedSiteDetails();
+  const fallback: Record<string, string> = {
+    name: site.name,
+    defaultCity: site.defaultCity,
+    ...site.brokerage,
+  };
+  const fields = SITE_FIELDS.map((f) => ({ key: f.key, label: f.label, hint: f.hint, value: saved[f.key] ?? "", fallback: fallback[f.key] ?? "" }));
   return (
     <>
       <Card title="Organization" description="Workspace colours and listing defaults.">
@@ -149,15 +151,8 @@ async function OrganizationSection() {
           refPrefix={get("ref_prefix") ?? "BRX"}
         />
       </Card>
-      <Card title="Website details" description="Set through environment variables (NEXT_PUBLIC_BRAND_NAME, NEXT_PUBLIC_BROKERAGE_*). Changing them needs a redeploy.">
-        <dl className="grid gap-4 sm:grid-cols-2">
-          {details.map((d) => (
-            <div key={d.label}>
-              <dt className="label">{d.label}</dt>
-              <dd className="text-sm font-semibold text-[var(--s-text)]">{d.value || <span className="text-[var(--s-muted)]">Not set</span>}</dd>
-            </div>
-          ))}
-        </dl>
+      <Card title="Website details" description="Brand name and the contact details shown across the public site, emails and legal pages. Saving updates every page straight away, with no redeploy. Leave a field empty to use the hosting panel's NEXT_PUBLIC_* value.">
+        <SiteDetailsForm fields={fields} />
       </Card>
     </>
   );

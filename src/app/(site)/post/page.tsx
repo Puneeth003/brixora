@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PostWizard, type PostPrefill } from "@/components/public/PostWizard";
 import { PROPERTY_TYPES } from "@/lib/constants";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 
-export const metadata: Metadata = {
-  title: "Post your property",
-  description: `List your flat, villa, plot or commercial property with ${site.name}. Every listing is reviewed by our team.`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSite();
+  return {
+    title: "Post your property",
+    description: `List your flat, villa, plot or commercial property with ${site.name}. Every listing is reviewed by our team.`,
+  };
+}
 
 export default function PostPage({ searchParams }: PageProps<"/post">) {
   return (
@@ -26,6 +29,7 @@ export default function PostPage({ searchParams }: PageProps<"/post">) {
 
 /** Prefill from the home page "Sell" quick form (?listing_type=&property_type=&locality=&price=). */
 async function Wizard({ searchParams }: Pick<PageProps<"/post">, "searchParams">) {
+  const site = await getSite();
   const sp = await searchParams;
   const str = (v: string | string[] | undefined) => (typeof v === "string" ? v.trim().slice(0, 80) : undefined);
   const type = str(sp.property_type);
@@ -36,5 +40,5 @@ async function Wizard({ searchParams }: Pick<PageProps<"/post">, "searchParams">
     locality: str(sp.locality) || undefined,
     price: str(sp.price)?.replace(/\D/g, "") || undefined,
   };
-  return <PostWizard defaultCity={site.defaultCity} prefill={prefill} />;
+  return <PostWizard defaultCity={site.defaultCity} brandName={site.name} prefill={prefill} />;
 }

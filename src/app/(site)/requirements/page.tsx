@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
 import { getLocalities } from "@/lib/queries";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 import { RequirementForm } from "@/components/public/RequirementForm";
 
-export const metadata: Metadata = {
-  title: "Tell us what you need",
-  description: `Can't find the right property in ${site.defaultCity}? Tell ${site.name} what you are looking for and our team will find it for you.`,
-  alternates: { canonical: "/requirements" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSite();
+  return {
+    title: "Tell us what you need",
+    description: `Can't find the right property in ${site.defaultCity}? Tell ${site.name} what you are looking for and our team will find it for you.`,
+    alternates: { canonical: "/requirements" },
+  };
+}
 
 export default async function RequirementsPage() {
+  const site = await getSite();
   const localities = await getLocalities();
   return (
     <div className="container-page py-10">

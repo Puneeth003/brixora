@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { savePropertyEdits } from "@/app/admin/actions";
+import { Dropdown } from "@/components/Dropdown";
 import { AMENITIES, FURNISHING, PROPERTY_TYPES } from "@/lib/constants";
 import type { Builder, Project, Property } from "@/lib/types";
 
@@ -9,6 +10,7 @@ export function PropertyForm({ p, builders, projects }: { p: Property; builders:
   const [state, action, pending] = useActionState(savePropertyEdits, null);
   const [builderId, setBuilderId] = useState(p.builder_id ?? "");
   const amenityOptions = Array.from(new Set([...AMENITIES, ...p.amenities]));
+  const builderProjects = projects.filter((pr) => !builderId || pr.builder_id === builderId);
 
   return (
     <form action={action} className="card p-6">
@@ -34,19 +36,25 @@ export function PropertyForm({ p, builders, projects }: { p: Property; builders:
         <Group legend="Basics">
           <div className="grid gap-4 sm:grid-cols-2">
             <F label="Listing type">
-              <select name="listing_type" defaultValue={p.listing_type} className="input">
-                <option value="sale">Sale</option>
-                <option value="rent">Rent</option>
-              </select>
+              <Dropdown
+                name="listing_type"
+                label="Listing type"
+                variant="field"
+                defaultValue={p.listing_type}
+                options={[
+                  { value: "sale", label: "Sale" },
+                  { value: "rent", label: "Rent" },
+                ]}
+              />
             </F>
             <F label="Property type">
-              <select name="property_type" defaultValue={p.property_type} className="input">
-                {PROPERTY_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                name="property_type"
+                label="Property type"
+                variant="field"
+                defaultValue={p.property_type}
+                options={PROPERTY_TYPES.map((t) => ({ value: t.value, label: t.label }))}
+              />
             </F>
           </div>
           <F label="Title (public)">
@@ -103,14 +111,13 @@ export function PropertyForm({ p, builders, projects }: { p: Property; builders:
               <input name="area_sqft" defaultValue={p.area_sqft ?? ""} inputMode="numeric" className="input" />
             </F>
             <F label="Furnishing">
-              <select name="furnishing" defaultValue={p.furnishing ?? ""} className="input">
-                <option value="">—</option>
-                {FURNISHING.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                name="furnishing"
+                label="Furnishing"
+                variant="field"
+                defaultValue={p.furnishing ?? ""}
+                options={[{ value: "", label: "—" }, ...FURNISHING]}
+              />
             </F>
             <F label="Floor">
               <input name="floor" defaultValue={p.floor ?? ""} className="input" />
@@ -138,26 +145,26 @@ export function PropertyForm({ p, builders, projects }: { p: Property; builders:
         <Group legend="Builder & project">
           <div className="grid gap-4 sm:grid-cols-3">
             <F label="Builder">
-              <select name="builder_id" value={builderId} onChange={(e) => setBuilderId(e.target.value)} className="input">
-                <option value="">—</option>
-                {builders.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                name="builder_id"
+                label="Builder"
+                variant="field"
+                value={builderId}
+                onChange={setBuilderId}
+                searchable={builders.length > 8}
+                options={[{ value: "", label: "—" }, ...builders.map((b) => ({ value: b.id, label: b.name }))]}
+              />
             </F>
             <F label="Project">
-              <select name="project_id" defaultValue={p.project_id ?? ""} className="input" key={builderId}>
-                <option value="">—</option>
-                {projects
-                  .filter((pr) => !builderId || pr.builder_id === builderId)
-                  .map((pr) => (
-                    <option key={pr.id} value={pr.id}>
-                      {pr.name}
-                    </option>
-                  ))}
-              </select>
+              <Dropdown
+                key={builderId}
+                name="project_id"
+                label="Project"
+                variant="field"
+                defaultValue={builderProjects.some((pr) => pr.id === p.project_id) ? (p.project_id ?? "") : ""}
+                searchable={builderProjects.length > 8}
+                options={[{ value: "", label: "—" }, ...builderProjects.map((pr) => ({ value: pr.id, label: pr.name }))]}
+              />
             </F>
             <F label="RERA no.">
               <input name="rera_no" defaultValue={p.rera_no ?? ""} className="input" />

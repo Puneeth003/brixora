@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,12 +13,15 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL(site.url),
-  title: { default: `${site.name} – Verified properties in ${site.defaultCity}`, template: `%s | ${site.name}` },
-  description: `Browse verified flats, villas, plots and commercial spaces for sale and rent in ${site.defaultCity}. ${site.tagline}`,
-  openGraph: { siteName: site.name, type: "website", locale: "en_IN" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSite();
+  return {
+    metadataBase: new URL(site.url),
+    title: { default: `${site.name} – Verified properties in ${site.defaultCity}`, template: `%s | ${site.name}` },
+    description: `Browse verified flats, villas, plots and commercial spaces for sale and rent in ${site.defaultCity}. ${site.tagline}`,
+    openGraph: { siteName: site.name, type: "website", locale: "en_IN" },
+  };
+}
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

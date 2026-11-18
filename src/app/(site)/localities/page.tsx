@@ -3,12 +3,15 @@ import Link from "next/link";
 import { getLocalities, getPriceStats } from "@/lib/queries";
 import { formatNumber, slugify } from "@/lib/format";
 import { MIN_SAMPLE, localityKey } from "@/lib/price-stats";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 
-export const metadata: Metadata = {
-  title: `Localities in ${site.defaultCity}`,
-  description: `Browse verified properties by locality in ${site.defaultCity}.`,
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSite();
+  return {
+    title: `Localities in ${site.defaultCity}`,
+    description: `Browse verified properties by locality in ${site.defaultCity}.`,
+  };
+}
 
 export default async function LocalitiesPage() {
   const [localities, stats] = await Promise.all([getLocalities(), getPriceStats()]);

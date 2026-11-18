@@ -1,12 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import { site } from "@/lib/site";
+import { getSite } from "@/lib/site-settings";
 
 /**
  * Full-screen sign-in scene: the coast photo behind, a headline on the left and the
  * form card on the right (stacked on phones). Used by the member and staff logins.
  */
-export function AuthScene({
+export async function AuthScene({
   title,
   subtitle,
   children,
@@ -18,6 +18,7 @@ export function AuthScene({
   /** Show the wordmark top-left (off when the site header is already above). */
   logo?: boolean;
 }) {
+  const site = await getSite();
   return (
     <section className="relative isolate flex min-h-[calc(100dvh-4rem)] flex-1 items-center overflow-hidden">
       <Image src="/hero/hero-coast-villa.webp" alt="" fill priority sizes="100vw" className="-z-20 object-cover" />
@@ -36,16 +37,5 @@ export function AuthScene({
         <div className="w-full rounded-[28px] bg-[#fdf6ee]/95 p-7 shadow-2xl ring-1 ring-black/5 backdrop-blur sm:p-9">{children}</div>
       </div>
     </section>
-  );
-}
-
-/** "──── or ────" divider for the auth cards. */
-export function OrDivider() {
-  return (
-    <div className="my-5 flex items-center gap-3 text-xs text-zinc-500">
-      <span className="h-px flex-1 bg-zinc-300/80" />
-      or
-      <span className="h-px flex-1 bg-zinc-300/80" />
-    </div>
   );
 }
