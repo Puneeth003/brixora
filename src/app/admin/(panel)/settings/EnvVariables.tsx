@@ -14,11 +14,15 @@ type Row = { id: number; name: string; value: string; reveal: boolean };
 let nextId = 1;
 const row = (name = "", value = ""): Row => ({ id: nextId++, name, value, reveal: false });
 
-/** KEY=value lines; comments, blank lines, `export ` and surrounding quotes are handled. */
+/**
+ * Accepts a .env file or a notes file as it is: KEY=value, KEY: value or KEY<tab>value
+ * (copied from a hosting panel's table). Headings, comments and other prose are ignored;
+ * `export ` and surrounding quotes are stripped.
+ */
 function parseDotenv(text: string) {
   const out: [string, string][] = [];
   for (const line of text.split(/\r?\n/)) {
-    const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    const m = line.match(/^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*(?:=|:|\t)\s*(.*?)\s*$/);
     if (!m) continue;
     let value = m[2];
     const quoted = value.match(/^(['"])(.*)\1$/);
@@ -28,6 +32,12 @@ function parseDotenv(text: string) {
   }
   return out;
 }
+
+/** Empty, or still a note placeholder like "<LATER: from Meta>" or "(LATER)". */
+const isPlaceholder = (v: string) => !v.trim() || /^<.*>$/.test(v.trim()) || /\bLATER\b/.test(v);
+
+/** Variables that only the hosting panel can set (the site needs them to start, or at build time). */
+const SERVER_ONLY = /^(DB_|AUTH_SECRET$|NEXT_PUBLIC_|UPLOAD_DIR$|CRON_SECRET$|ADMIN_2FA$|NODE_ENV$|TURNSTILE_)/;
 
 function Status({ state }: { state: ActionState }) {
   if (!state) return null;
@@ -53,15 +63,32 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
   const used = new Set(rows.map((r) => r.name));
   const update = (id: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
+  async function pasteClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) setDotenv(text);
+    } catch {
+      setState({ ok: false, error: "The browser blocked clipboard access. Paste into the box with Ctrl+V / ⌘V instead." });
+    }
+  }
+
   function importText() {
     const parsed = parseDotenv(dotenv);
-    const skipped: string[] = [];
+    const serverOnly: string[] = [];
+    const placeholders: string[] = [];
+    const unknown: string[] = [];
+    let added = 0;
     const next = rows.filter((r) => r.name || r.value).map((r) => ({ ...r }));
     for (const [name, value] of parsed) {
       if (!byName.has(name)) {
-        skipped.push(name);
+        (SERVER_ONLY.test(name) ? serverOnly : unknown).push(name);
         continue;
       }
+      if (isPlaceholder(value)) {
+        placeholders.push(name);
+        continue;
+      }
+      added++;
       const existing = next.find((r) => r.name === name);
       if (existing) existing.value = value;
       else next.push(row(name, value));
@@ -69,11 +96,16 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
     setRows(next.length ? next : [row()]);
     setDotenv("");
     setImporting(false);
-    const added = parsed.length - skipped.length;
+    const notes = [
+      placeholders.length && `skipped ${placeholders.join(", ")} (no real value yet)`,
+      serverOnly.length && `left ${serverOnly.join(", ")} in the hosting panel`,
+      unknown.length && `ignored ${unknown.join(", ")} (not used by the website)`,
+    ].filter(Boolean);
+    const summary = `Imported ${added}${notes.length ? `; ${notes.join("; ")}` : ""}.`;
     setState(
-      skipped.length
-        ? { ok: false, error: `Imported ${added}. Skipped ${skipped.join(", ")}: those stay in the hosting panel. Press Save to apply.` }
-        : { ok: true, message: `Imported ${added}. Press Save to apply.` },
+      added
+        ? { ok: true, message: `${summary} Check the rows, then press Save.` }
+        : { ok: false, error: parsed.length ? summary : "No KEY=value lines found in the pasted text." },
     );
   }
 
@@ -171,20 +203,24 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
           + Add variable
         </button>
         <button type="button" onClick={() => setImporting((x) => !x)} className="btn-secondary px-3 py-2 text-sm">
-          Import .env
+          Import .env / note
         </button>
       </div>
 
       {importing && (
         <div className="space-y-2 rounded-2xl border border-[var(--s-border)] p-4">
           <label htmlFor="env-import" className="label">
-            Paste the contents of a .env file
+            Paste your .env file or notes as they are
           </label>
+          <p className="text-xs text-[var(--s-muted)]">
+            Lines like <code>KEY=value</code> or <code>KEY: value</code> are picked up. Headings, comments, placeholders like{" "}
+            <code>&lt;LATER&gt;</code> and server-only keys (database, AUTH_SECRET, NEXT_PUBLIC_*) are skipped.
+          </p>
           <textarea
             id="env-import"
             value={dotenv}
             onChange={(e) => setDotenv(e.target.value)}
-            rows={8}
+            rows={12}
             spellCheck={false}
             placeholder={"META_APP_ID=2001817940484419\nWHATSAPP_ES_CONFIG_ID=…"}
             className="input font-mono text-xs"
@@ -192,6 +228,9 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
           <div className="flex gap-2">
             <button type="button" onClick={importText} disabled={!dotenv.trim()} className="btn-primary px-3 py-2 text-sm">
               Import
+            </button>
+            <button type="button" onClick={pasteClipboard} className="btn-secondary px-3 py-2 text-sm">
+              Paste from clipboard
             </button>
             <button type="button" onClick={() => setImporting(false)} className="btn-secondary px-3 py-2 text-sm">
               Cancel
