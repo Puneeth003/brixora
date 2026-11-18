@@ -74,10 +74,13 @@ export async function envs<N extends SettableEnvName>(...names: N[]): Promise<Re
   return out;
 }
 
+/** Edited in Settings → Organization → Website details instead, so not listed on the Environment variables page. */
+export const IN_WEBSITE_DETAILS: SettableEnvName[] = ["BROKERAGE_ENQUIRY_WHATSAPP", "WHATSAPP_PHONE_NUMBER_ID"];
+
 /** For the settings page: which variables are saved here, and which come from the server. Secrets are never returned. */
 export async function envOverview() {
   const values = await saved();
-  return SETTABLE_ENV.map((v) => ({
+  return SETTABLE_ENV.filter((v) => !IN_WEBSITE_DETAILS.includes(v.name)).map((v) => ({
     ...v,
     saved: values.has(v.name),
     value: v.secret ? "" : (values.get(v.name) ?? ""),

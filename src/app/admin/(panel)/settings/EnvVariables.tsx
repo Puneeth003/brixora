@@ -35,6 +35,9 @@ function parseDotenv(text: string) {
 /** Empty, or still a note placeholder like "<LATER: from Meta>" or "(LATER)". */
 const isPlaceholder = (v: string) => !v.trim() || /^<.*>$/.test(v.trim()) || /\bLATER\b/.test(v);
 
+/** Set in Settings → Organization → Website details, not here. */
+const WEBSITE_DETAILS = new Set(["BROKERAGE_ENQUIRY_WHATSAPP", "WHATSAPP_PHONE_NUMBER_ID"]);
+
 /** Variables that only the hosting panel can set (the site needs them to start). */
 const SERVER_ONLY = /^(DB_|AUTH_SECRET$|UPLOAD_DIR$|NODE_ENV$)/;
 
@@ -71,7 +74,7 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
     const next: Record<string, string> = {};
     for (const [name, value] of parsed) {
       if (!byName.has(name)) {
-        (SERVER_ONLY.test(name) ? serverOnly : name.startsWith("NEXT_PUBLIC_") ? website : unknown).push(name);
+        (SERVER_ONLY.test(name) ? serverOnly : name.startsWith("NEXT_PUBLIC_") || WEBSITE_DETAILS.has(name) ? website : unknown).push(name);
         continue;
       }
       if (isPlaceholder(value)) {
