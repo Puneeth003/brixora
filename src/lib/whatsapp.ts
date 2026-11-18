@@ -294,18 +294,42 @@ export async function sendTemplateTest(template: TemplateName, phone: string) {
   return deliver(id);
 }
 
-/** Approval status of each template in Meta (name → status by language), when the WABA is known. */
-export async function metaTemplateStatus(): Promise<Map<string, string> | null> {
+export type MetaTemplate = {
+  name: string;
+  language: string;
+  status: string;
+  category: string;
+  header: string | null;
+  body: string;
+  footer: string | null;
+  buttons: string[];
+};
+
+/** The templates as designed in Meta (WhatsApp Manager), or null when the WABA isn't known or Meta can't be reached. */
+export async function metaTemplates(): Promise<MetaTemplate[] | null> {
   const conn = await whatsappConnection();
   if (!conn?.wabaId) return null;
+  type Component = { type: string; format?: string; text?: string; buttons?: { text?: string }[] };
   try {
     const res = await fetch(
-      `https://graph.facebook.com/${await graphVersion()}/${conn.wabaId}/message_templates?fields=name,status,language&limit=200`,
+      `https://graph.facebook.com/${await graphVersion()}/${conn.wabaId}/message_templates?fields=name,status,language,category,components&limit=200`,
       { headers: { Authorization: `Bearer ${conn.token}` }, cache: "no-store", signal: AbortSignal.timeout(10_000) },
     );
     if (!res.ok) return null;
-    const json = (await res.json()) as { data?: { name: string; status: string; language: string }[] };
-    return new Map((json.data ?? []).map((t) => [`${t.name}|${t.language}`, t.status]));
+    const json = (await res.json()) as { data?: { name: string; status: string; language: string; category: string; components?: Component[] }[] };
+    return (json.data ?? []).map((t) => {
+      const part = (type: string) => t.components?.find((c) => c.type === type);
+      return {
+        name: t.name,
+        language: t.language,
+        status: t.status,
+        category: t.category,
+        header: part("HEADER")?.format === "TEXT" ? (part("HEADER")?.text ?? null) : null,
+        body: part("BODY")?.text ?? "",
+        footer: part("FOOTER")?.text ?? null,
+        buttons: (part("BUTTONS")?.buttons ?? []).map((b) => b.text ?? "").filter(Boolean),
+      };
+    });
   } catch {
     return null;
   }

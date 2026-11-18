@@ -8,7 +8,7 @@ import { site } from "@/lib/site";
 import { PageHeader } from "@/components/admin/ui";
 import { ChangePasswordForm } from "@/components/crm/forms";
 import { signOutAllStaff } from "@/app/admin/settings-actions";
-import { brokeragePhone, graphVersion, metaTemplateStatus, normalizePhone, templateSettings, TEMPLATES, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
+import { brokeragePhone, graphVersion, metaTemplates, normalizePhone, templateSettings, TEMPLATES, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
 import { formatDateTime } from "@/lib/format";
 import { OrganizationForm, ProfileForm, TestEmailForm } from "./SettingsForms";
 import { EnvVariables } from "./EnvVariables";
@@ -251,24 +251,20 @@ async function WhatsAppSection() {
 }
 
 async function TemplatesSection() {
-  const [settings, status] = await Promise.all([templateSettings(), metaTemplateStatus()]);
-  const templates = TEMPLATES.map((t) => ({
-    ...t,
-    ...settings[t.key],
-    status: status?.get(`${settings[t.key].name}|${settings[t.key].lang}`) ?? null,
-  }));
+  const [settings, meta] = await Promise.all([templateSettings(), metaTemplates()]);
+  const templates = TEMPLATES.map((t) => ({ ...t, ...settings[t.key] }));
   return (
     <>
       <Card
         title="WhatsApp templates"
-        description="Every message the website sends on WhatsApp. Write and approve the wording in Meta (WhatsApp Manager → Message templates), then make the name and language here match what Meta approved."
+        description="Each message the website sends, shown with the wording you designed and Meta approved. Create or edit the wording in Meta (WhatsApp Manager → Message templates), then choose it here."
       >
-        <WhatsAppTemplates templates={templates} statusKnown={status !== null} />
+        <WhatsAppTemplates templates={templates} meta={meta} />
       </Card>
-      {status === null && (
+      {meta === null && (
         <p className="px-1 text-xs text-[var(--s-muted)]">
-          Meta&apos;s approval status shows here once a number is connected, or once WHATSAPP_TOKEN and WHATSAPP_WABA_ID are set in{" "}
-          <Link href="/admin/settings?section=env" className="underline">Environment variables</Link>.
+          Your Meta templates and their previews appear here once a number is connected, or once WHATSAPP_TOKEN and WHATSAPP_WABA_ID are set in{" "}
+          <Link href="/admin/settings?section=env" className="underline">Environment variables</Link>. Until then, type the name and language.
         </p>
       )}
     </>
