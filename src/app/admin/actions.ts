@@ -727,7 +727,7 @@ export async function retryEnquiryForward(enquiryId: string) {
   if (!e) return;
   const ref = e.reference_no ?? "-";
   const res = await notify(
-    brokeragePhone(),
+    await brokeragePhone(),
     "enquiry_forward",
     [ref, e.name, displayPhone(e.phone), (e.message || "-").replace(/\s+/g, " ").slice(0, 900), propertyUrl(ref)],
     e.id,

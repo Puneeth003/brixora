@@ -419,6 +419,7 @@ const SETTINGS_VERBS: Record<string, string> = {
   signed_out_all: "signed out all staff",
   whatsapp_connected: "connected WhatsApp",
   whatsapp_disconnected: "disconnected WhatsApp",
+  env_changed: "changed environment variables",
 };
 
 /** Timeline dot category by action (the part before any ":"); anything else is "listing". */

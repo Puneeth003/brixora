@@ -5,6 +5,7 @@ import { logActivity, SETTINGS_ENTITY_ID } from "@/lib/activity";
 import { requireAdmin } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { graphVersion, whatsappConnection } from "@/lib/whatsapp";
 import type { ActionState } from "@/lib/types";
 
@@ -13,7 +14,7 @@ import type { ActionState } from "@/lib/types";
 // over the one-time code plus the WABA and phone number IDs; everything else happens here.
 
 const ID = /^\d{5,30}$/;
-const graph = (path: string) => `https://graph.facebook.com/${graphVersion()}/${path}`;
+const graph = async (path: string) => `https://graph.facebook.com/${await graphVersion()}/${path}`;
 
 async function call<T>(url: string, init: RequestInit & { token?: string } = {}): Promise<T> {
   const { token, ...rest } = init;
@@ -33,8 +34,8 @@ const setConfig = (name: string, value: string) =>
 
 export async function connectWhatsApp(input: { code: string; wabaId: string; phoneNumberId?: string }): Promise<ActionState> {
   const admin = await requireAdmin();
-  const appId = process.env.META_APP_ID;
-  const appSecret = process.env.WHATSAPP_APP_SECRET;
+  const appId = await env("META_APP_ID");
+  const appSecret = await env("WHATSAPP_APP_SECRET");
   if (!appId || !appSecret) return { ok: false, error: "META_APP_ID and WHATSAPP_APP_SECRET must be set." };
   const code = String(input.code ?? "");
   if (!code || code.length > 2048 || !ID.test(input.wabaId) || (input.phoneNumberId && !ID.test(input.phoneNumberId))) {
@@ -44,23 +45,23 @@ export async function connectWhatsApp(input: { code: string; wabaId: string; pho
   try {
     // The code is valid for about 30 seconds, so exchange it first.
     const q = new URLSearchParams({ client_id: appId, client_secret: appSecret, code });
-    const { access_token: token } = await call<{ access_token: string }>(graph(`oauth/access_token?${q}`));
+    const { access_token: token } = await call<{ access_token: string }>(await graph(`oauth/access_token?${q}`));
     if (!token) return { ok: false, error: "Meta didn't return an access token." };
 
     // The coexistence finish event doesn't always carry the phone number ID.
     let phoneNumberId = input.phoneNumberId;
     if (!phoneNumberId) {
-      const list = await call<{ data?: { id: string }[] }>(graph(`${input.wabaId}/phone_numbers?fields=id`), { token });
+      const list = await call<{ data?: { id: string }[] }>(await graph(`${input.wabaId}/phone_numbers?fields=id`), { token });
       phoneNumberId = list.data?.[0]?.id;
       if (!phoneNumberId) return { ok: false, error: "No phone number found on this WhatsApp Business Account." };
     }
 
     // Deliver this WABA's webhooks (statuses, inbound, app echoes) to our app. Coexistence
     // numbers are already registered on the phone app, so /register is not called.
-    await call(graph(`${input.wabaId}/subscribed_apps`), { method: "POST", token });
+    await call(await graph(`${input.wabaId}/subscribed_apps`), { method: "POST", token });
 
     const number = await call<{ display_phone_number?: string; verified_name?: string }>(
-      graph(`${phoneNumberId}?fields=display_phone_number,verified_name`),
+      await graph(`${phoneNumberId}?fields=display_phone_number,verified_name`),
       { token },
     );
 
@@ -95,7 +96,7 @@ export async function disconnectWhatsApp(): Promise<ActionState> {
   const conn = await whatsappConnection();
   if (conn?.source === "connected" && conn.wabaId) {
     // Best effort: stop webhooks for this WABA.
-    await call(graph(`${conn.wabaId}/subscribed_apps`), { method: "DELETE", token: conn.token }).catch(() => {});
+    await call(await graph(`${conn.wabaId}/subscribed_apps`), { method: "DELETE", token: conn.token }).catch(() => {});
   }
   await db.run("DELETE FROM app_config WHERE name LIKE 'wa\\_%'");
   await logActivity({

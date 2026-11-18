@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { db } from "@/lib/db";
 import { safeEqual } from "@/lib/crypto";
+import { env } from "@/lib/env";
 import { normalizePhone } from "@/lib/whatsapp";
 
 // Meta WhatsApp webhook: delivery status updates and inbound STOP / START replies.
@@ -16,8 +17,8 @@ const START_WORDS = ["START", "SUBSCRIBE"];
 type StatusEvent = { id: string; status: string; errors?: { title?: string; message?: string }[] };
 type InboundMessage = { from: string; type: string; text?: { body: string }; button?: { text: string } };
 
-function validSignature(body: string, header: string | null) {
-  const secret = process.env.WHATSAPP_APP_SECRET;
+async function validSignature(body: string, header: string | null) {
+  const secret = await env("WHATSAPP_APP_SECRET");
   if (!secret || !header?.startsWith("sha256=")) return false;
   const expected = createHmac("sha256", secret).update(body).digest("hex");
   return safeEqual(expected, header.slice("sha256=".length));
@@ -25,7 +26,7 @@ function validSignature(body: string, header: string | null) {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const token = process.env.WHATSAPP_VERIFY_TOKEN;
+  const token = await env("WHATSAPP_VERIFY_TOKEN");
   const ok =
     Boolean(token) &&
     url.searchParams.get("hub.mode") === "subscribe" &&
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.text();
-  if (!validSignature(body, request.headers.get("x-hub-signature-256"))) {
+  if (!(await validSignature(body, request.headers.get("x-hub-signature-256")))) {
     return Response.json({ error: "Invalid signature" }, { status: 401 });
   }
 

@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Add staff" };
 
 export default async function NewUserPage() {
   await requireAdmin();
-  const mailReady = mailConfigured || process.env.NODE_ENV !== "production";
+  const mailReady = (await mailConfigured()) || process.env.NODE_ENV !== "production";
 
   return (
     <>

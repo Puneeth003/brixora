@@ -1,5 +1,6 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
+import { envs } from "./env";
 import { site } from "./site";
 
 // Outgoing email over SMTP (Hostinger: smtp.hostinger.com, port 465, SMTP_SECURE=ssl).
@@ -10,56 +11,71 @@ import { site } from "./site";
 // "none" = plain, only for a local relay. Mail carries password-reset codes, so an
 // unset or unknown value never falls back to plain text to a remote host.
 
-function tlsMode() {
-  const v = (process.env.SMTP_SECURE ?? "").trim().toLowerCase();
+const MAIL_VARS = ["SMTP_HOST", "SMTP_PORT", "SMTP_SECURE", "SMTP_USER", "SMTP_PASS", "MAIL_FROM", "MAIL_FROM_NAME"] as const;
+type MailEnv = Awaited<ReturnType<typeof mailEnv>>;
+
+/** SMTP settings: Settings → Environment variables, else the server's. */
+const mailEnv = () => envs(...MAIL_VARS);
+
+function tlsMode(e: MailEnv) {
+  const v = (e.SMTP_SECURE ?? "").trim().toLowerCase();
   if (v === "ssl") return "ssl";
   if (v === "tls" || v === "starttls") return "tls";
-  const local = /^(localhost|127\.0\.0\.1|::1)$/i.test(process.env.SMTP_HOST ?? "");
+  const local = /^(localhost|127\.0\.0\.1|::1)$/i.test(e.SMTP_HOST ?? "");
   if (v === "none" && local) return "none";
-  return Number(process.env.SMTP_PORT) === 465 ? "ssl" : "tls";
+  return Number(e.SMTP_PORT) === 465 ? "ssl" : "tls";
 }
 
-const globalForMail = globalThis as unknown as { __brixoraMail?: Transporter };
+// One transport per distinct SMTP setup, so a change in Settings takes effect without a restart.
+const globalForMail = globalThis as unknown as { __brixoraMail?: { key: string; transport: Transporter } };
 
-function transport() {
-  if (!globalForMail.__brixoraMail) {
-    const mode = tlsMode();
-    globalForMail.__brixoraMail = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || (mode === "ssl" ? 465 : 587),
-      secure: mode === "ssl",
-      requireTLS: mode === "tls",
-      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
-      // Bounded waits, so an unreachable mail server can't hold a request open.
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 20_000,
-    });
+function transport(e: MailEnv) {
+  const key = JSON.stringify([e.SMTP_HOST, e.SMTP_PORT, e.SMTP_SECURE, e.SMTP_USER, e.SMTP_PASS]);
+  if (globalForMail.__brixoraMail?.key !== key) {
+    const mode = tlsMode(e);
+    globalForMail.__brixoraMail = {
+      key,
+      transport: nodemailer.createTransport({
+        host: e.SMTP_HOST,
+        port: Number(e.SMTP_PORT) || (mode === "ssl" ? 465 : 587),
+        secure: mode === "ssl",
+        requireTLS: mode === "tls",
+        auth: e.SMTP_USER ? { user: e.SMTP_USER, pass: e.SMTP_PASS } : undefined,
+        // Bounded waits, so an unreachable mail server can't hold a request open.
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 20_000,
+      }),
+    };
   }
-  return globalForMail.__brixoraMail;
+  return globalForMail.__brixoraMail.transport;
 }
 
-export const mailConfigured = Boolean(process.env.SMTP_HOST);
+export const mailConfigured = async () => Boolean((await mailEnv()).SMTP_HOST);
 
-/** Sender address shown on outgoing mail (for the settings page). */
-export const mailFrom = process.env.MAIL_FROM || process.env.SMTP_USER || "";
+/** SMTP host and sender address shown on the settings page. */
+export async function mailSummary() {
+  const e = await mailEnv();
+  return { host: e.SMTP_HOST ?? "", from: e.MAIL_FROM || e.SMTP_USER || "" };
+}
 
 /** Sends, or (development without SMTP_HOST) prints to the console. Says which. */
 export async function sendMail(msg: { to: string; subject: string; text: string; html: string }): Promise<"sent" | "printed"> {
-  if (!mailConfigured) {
+  const e = await mailEnv();
+  if (!e.SMTP_HOST) {
     if (process.env.NODE_ENV === "production") throw new Error("Email is not configured (SMTP_HOST)");
     console.log(`[mail:dev] to=${msg.to} subject=${JSON.stringify(msg.subject)}\n${msg.text}\n`);
     return "printed";
   }
-  const from = process.env.MAIL_FROM || process.env.SMTP_USER;
-  await transport().sendMail({ from: `"${process.env.MAIL_FROM_NAME || site.name}" <${from}>`, ...msg });
+  const from = e.MAIL_FROM || e.SMTP_USER;
+  await transport(e).sendMail({ from: `"${e.MAIL_FROM_NAME || site.name}" <${from}>`, ...msg });
   return "sent";
 }
 
 /** Plain-language reason a send failed, for the admin (never shown to the public). */
 export function mailErrorReason(e: unknown) {
   const err = e as { code?: string; responseCode?: number; message?: string };
-  if (!mailConfigured) return "email isn't set up on the server (SMTP_HOST is empty)";
+  if (err.message === "Email is not configured (SMTP_HOST)") return "email isn't set up on the server (SMTP_HOST is empty)";
   if (err.code === "EAUTH" || err.responseCode === 535 || err.responseCode === 534) {
     return "the email server rejected the login: check SMTP_USER and SMTP_PASS (for Gmail, a 16-letter app password with no spaces)";
   }

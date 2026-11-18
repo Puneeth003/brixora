@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { adminMfaRequired, requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { mailConfigured, mailFrom } from "@/lib/mail";
+import { envOverview, envs } from "@/lib/env";
+import { mailConfigured, mailSummary } from "@/lib/mail";
 import { site } from "@/lib/site";
 import { PageHeader } from "@/components/admin/ui";
 import { ChangePasswordForm } from "@/components/crm/forms";
@@ -10,6 +11,7 @@ import { signOutAllStaff } from "@/app/admin/settings-actions";
 import { brokeragePhone, graphVersion, normalizePhone, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
 import { formatDateTime } from "@/lib/format";
 import { OrganizationForm, ProfileForm, TestEmailForm } from "./SettingsForms";
+import { EnvVariables } from "./EnvVariables";
 import { WhatsAppConnect } from "./WhatsAppConnect";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -19,6 +21,7 @@ const SECTIONS = [
   { key: "organization", label: "Organization", hint: "Colours, listings and verification", adminOnly: true },
   { key: "users", label: "Users & roles", hint: "Staff accounts and workload", adminOnly: true },
   { key: "whatsapp", label: "WhatsApp", hint: "Connect the business number", adminOnly: true },
+  { key: "env", label: "Environment variables", hint: "WhatsApp and email keys", adminOnly: true },
   { key: "security", label: "Security", hint: "Sign-in and integrations", adminOnly: true },
 ] as const;
 type SectionKey = (typeof SECTIONS)[number]["key"];
@@ -61,6 +64,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/admin/s
           {active === "organization" && <OrganizationSection />}
           {active === "users" && <UsersSection />}
           {active === "whatsapp" && <WhatsAppSection />}
+          {active === "env" && <EnvSection />}
           {active === "security" && <SecuritySection email={staff.email} />}
         </div>
       </div>
@@ -176,11 +180,12 @@ function UsersSection() {
 async function WhatsAppSection() {
   const conn = await whatsappConnection();
   const configured = (value: string | undefined) => Boolean(value?.trim() && !/[<>]|placeholder|\bLATER\b/i.test(value));
-  const appId = configured(process.env.META_APP_ID) ? process.env.META_APP_ID!.trim() : "";
-  const configId = configured(process.env.WHATSAPP_ES_CONFIG_ID) ? process.env.WHATSAPP_ES_CONFIG_ID!.trim() : "";
-  const appSecretReady = configured(process.env.WHATSAPP_APP_SECRET);
-  const envProblems = whatsappEnvProblems();
-  const forwardTo = brokeragePhone();
+  const e = await envs("META_APP_ID", "WHATSAPP_ES_CONFIG_ID", "WHATSAPP_APP_SECRET");
+  const appId = configured(e.META_APP_ID) ? e.META_APP_ID!.trim() : "";
+  const configId = configured(e.WHATSAPP_ES_CONFIG_ID) ? e.WHATSAPP_ES_CONFIG_ID!.trim() : "";
+  const appSecretReady = configured(e.WHATSAPP_APP_SECRET);
+  const envProblems = await whatsappEnvProblems();
+  const forwardTo = await brokeragePhone();
   const selfForward = Boolean(conn?.displayPhone && forwardTo && normalizePhone(conn.displayPhone) === forwardTo);
   const rows = conn
     ? [
@@ -216,10 +221,11 @@ async function WhatsAppSection() {
           </p>
         )}
         {appId && configId && appSecretReady ? (
-          <WhatsAppConnect appId={appId} configId={configId} version={graphVersion()} connected={conn?.source === "connected"} />
+          <WhatsAppConnect appId={appId} configId={configId} version={await graphVersion()} connected={conn?.source === "connected"} />
         ) : (
           <p className="text-sm text-[var(--s-text-2)]">
-            Set valid <code>META_APP_ID</code>, <code>WHATSAPP_ES_CONFIG_ID</code> and <code>WHATSAPP_APP_SECRET</code> values on the server to enable signup. After Meta approves the partner setup, use this button to connect the production number; credentials are stored automatically.
+            Set valid <code>META_APP_ID</code>, <code>WHATSAPP_ES_CONFIG_ID</code> and <code>WHATSAPP_APP_SECRET</code> in{" "}
+            <Link href="/admin/settings?section=env" className="underline">Environment variables</Link> to enable signup. After Meta approves the partner setup, use this button to connect the production number; credentials are stored automatically.
           </p>
         )}
         {selfForward && (
@@ -241,29 +247,55 @@ async function WhatsAppSection() {
   );
 }
 
+async function EnvSection() {
+  const vars = await envOverview();
+  const fromServer = vars.filter((v) => !v.saved && v.onServer).map((v) => v.name);
+  return (
+    <>
+      <Card
+        title="Environment variables"
+        description="WhatsApp and email keys used by the website. Values saved here take effect within 15 seconds, with no redeploy, and override the hosting panel's. They're stored encrypted; saved secrets are never shown again."
+      >
+        <EnvVariables vars={vars} />
+      </Card>
+      <Card title="Set in the hosting panel" description="Database, AUTH_SECRET and NEXT_PUBLIC_* website details can only be set on the server, because the site needs them to start or bakes them in at build time.">
+        {fromServer.length ? (
+          <p className="text-sm text-[var(--s-text-2)]">
+            Also coming from the server (no value saved here): <span className="font-mono text-xs">{fromServer.join(", ")}</span>
+          </p>
+        ) : (
+          <p className="text-sm text-[var(--s-muted)]">No other WhatsApp or email variables are set on the server.</p>
+        )}
+      </Card>
+    </>
+  );
+}
+
 async function SecuritySection({ email }: { email: string }) {
   const sessions = await db.count("SELECT COUNT(*) FROM sessions WHERE kind = 'admin' AND expires_at > UTC_TIMESTAMP(3)");
   const whatsappOn = Boolean(await whatsappConnection());
-  const envProblems = whatsappEnvProblems();
+  const envProblems = await whatsappEnvProblems();
+  const mailOn = await mailConfigured();
+  const mail = await mailSummary();
   return (
     <>
       <Card title="Security" description="Read-only. These are configured through environment variables.">
         <ul className="divide-y divide-[var(--s-border)]">
           <StatusRow label="Two-factor authentication" on={adminMfaRequired} detail="ADMIN_2FA" />
-          <StatusRow label="Email" on={mailConfigured} detail={mailConfigured ? `${process.env.SMTP_HOST} · from ${mailFrom || "(no sender set)"}` : "SMTP_HOST"} />
+          <StatusRow label="Email" on={mailOn} detail={mailOn ? `${mail.host} · from ${mail.from || "(no sender set)"}` : "SMTP_HOST"} />
           <StatusRow label="WhatsApp" on={whatsappOn}
             detail={!whatsappOn && envProblems.length ? `${envProblems.join(", ")}: placeholder text, not a real value` : "Settings → WhatsApp, or WHATSAPP_TOKEN"}
           />
         </ul>
       </Card>
       <Card title="Outgoing email" description="Password-reset codes, welcome emails and password-changed notices go out over SMTP. Send yourself a test to check delivery.">
-        {mailConfigured ? (
+        {mailOn ? (
           <TestEmailForm to={email} />
         ) : (
           <p className="text-sm text-[var(--s-text-2)]">
             Not configured, so password resets can&apos;t be emailed. Create a mailbox for the domain (Hostinger: hPanel → Emails), then set{" "}
-            <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_SECURE</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> and <code>MAIL_FROM</code> in the
-            Node.js app&apos;s environment variables and redeploy.
+            <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_SECURE</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> and <code>MAIL_FROM</code> in{" "}
+            <Link href="/admin/settings?section=env" className="underline">Environment variables</Link>.
           </p>
         )}
       </Card>

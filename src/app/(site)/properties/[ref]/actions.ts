@@ -79,7 +79,7 @@ export async function submitEnquiry(_prev: ActionState, formData: FormData): Pro
     visitAt: visit?.at ?? null,
   });
 
-  const to = brokeragePhone();
+  const to = await brokeragePhone();
   const result = await notify(
     to,
     "enquiry_forward",

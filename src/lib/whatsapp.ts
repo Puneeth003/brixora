@@ -1,6 +1,7 @@
 import "server-only";
 import { decrypt } from "./crypto";
 import { db, uuid } from "./db";
+import { env } from "./env";
 
 // WhatsApp Cloud API (Meta) template sender. See SPEC.md §10, §12.
 // If a BSP (Interakt / WATI / AiSensy) is chosen instead, replace sendTemplate() only.
@@ -34,11 +35,11 @@ export function normalizePhone(phone: string) {
   return phone.replace(/\D/g, "");
 }
 
-export function brokeragePhone() {
-  return (process.env.BROKERAGE_ENQUIRY_WHATSAPP || process.env.NEXT_PUBLIC_BROKERAGE_WHATSAPP || "").replace(/\D/g, "");
+export async function brokeragePhone() {
+  return ((await env("BROKERAGE_ENQUIRY_WHATSAPP")) || process.env.NEXT_PUBLIC_BROKERAGE_WHATSAPP || "").replace(/\D/g, "");
 }
 
-export const graphVersion = () => process.env.WHATSAPP_API_VERSION || "v26.0";
+export const graphVersion = async () => (await env("WHATSAPP_API_VERSION")) || "v26.0";
 
 export type WhatsAppConnection = {
   token: string;
@@ -51,25 +52,26 @@ export type WhatsAppConnection = {
 };
 
 /**
- * WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID, or null for each one that is empty or
+ * WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID (Settings → Environment variables, else the server), or null for each one that is empty or
  * still a placeholder (e.g. "<LATER: from Meta>"). Meta tokens have no spaces or angle
  * brackets and phone number IDs are all digits.
  */
-function envCredentials() {
-  const token = (process.env.WHATSAPP_TOKEN ?? "").trim();
-  const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
+async function envCredentials() {
+  const token = ((await env("WHATSAPP_TOKEN")) ?? "").trim();
+  const phoneNumberId = ((await env("WHATSAPP_PHONE_NUMBER_ID")) ?? "").trim();
   return {
+    raw: { token, phoneNumberId },
     token: /^[^\s<>]+$/.test(token) ? token : null,
     phoneNumberId: /^\d+$/.test(phoneNumberId) ? phoneNumberId : null,
   };
 }
 
 /** Names of the WhatsApp env variables that are set but can't be real values. */
-export function whatsappEnvProblems() {
-  const valid = envCredentials();
+export async function whatsappEnvProblems() {
+  const valid = await envCredentials();
   const bad: string[] = [];
-  if (process.env.WHATSAPP_TOKEN?.trim() && !valid.token) bad.push("WHATSAPP_TOKEN");
-  if (process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() && !valid.phoneNumberId) bad.push("WHATSAPP_PHONE_NUMBER_ID");
+  if (valid.raw.token && !valid.token) bad.push("WHATSAPP_TOKEN");
+  if (valid.raw.phoneNumberId && !valid.phoneNumberId) bad.push("WHATSAPP_PHONE_NUMBER_ID");
   return bad;
 }
 
@@ -99,7 +101,7 @@ export async function whatsappConnection(): Promise<WhatsAppConnection | null> {
       console.error("[whatsapp] stored token can't be decrypted", e);
     }
   }
-  const { token, phoneNumberId: envPhoneId } = envCredentials();
+  const { token, phoneNumberId: envPhoneId } = await envCredentials();
   if (!token || !envPhoneId) return null;
   return { token, phoneNumberId: envPhoneId, wabaId: null, displayPhone: null, verifiedName: null, connectedAt: null, source: "env" };
 }
@@ -123,14 +125,14 @@ async function sendTemplate(to: string, template: string, params: string[]): Pro
     components.push({ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: params[0] }] });
   }
 
-  const lang = process.env.WHATSAPP_TEMPLATE_LANG ?? "en";
+  const lang = (await env("WHATSAPP_TEMPLATE_LANG")) || "en";
   // With coexistence the API number is the brokerage's own WhatsApp; it can't message itself.
   if (conn.displayPhone && normalizePhone(conn.displayPhone) === to) {
     return { ok: false, error: "Recipient is the connected WhatsApp number itself. Set BROKERAGE_ENQUIRY_WHATSAPP to another number." };
   }
 
   try {
-    const res = await fetch(`https://graph.facebook.com/${graphVersion()}/${conn.phoneNumberId}/messages`, {
+    const res = await fetch(`https://graph.facebook.com/${await graphVersion()}/${conn.phoneNumberId}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${conn.token}`, "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin, requireStaff } from "@/lib/auth";
 import { diffFields, logActivity, SETTINGS_ENTITY_ID } from "@/lib/activity";
 import { db } from "@/lib/db";
+import { isSettableEnv, writeEnv, type SettableEnvName } from "@/lib/env";
 import { mailConfigured, sendMail, testEmail, mailErrorReason } from "@/lib/mail";
 import type { ActionState } from "@/lib/types";
 
@@ -68,8 +69,9 @@ export async function signOutAllStaff(formData: FormData) {
 /** Emails the signed-in admin, so SMTP delivery can be checked without resetting a password. */
 export async function sendTestEmail(): Promise<ActionState> {
   const staff = await requireAdmin();
-  if (!mailConfigured && process.env.NODE_ENV === "production") {
-    return { ok: false, error: "Email is not configured: set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER and SMTP_PASS, then redeploy." };
+  const configured = await mailConfigured();
+  if (!configured && process.env.NODE_ENV === "production") {
+    return { ok: false, error: "Email is not configured: set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER and SMTP_PASS in Settings → Environment variables." };
   }
   try {
     await sendMail({ to: staff.email, ...testEmail({ name: staff.name }) });
@@ -79,6 +81,41 @@ export async function sendTestEmail(): Promise<ActionState> {
   }
   return {
     ok: true,
-    message: mailConfigured ? `Sent to ${staff.email}. Check the inbox and spam folder.` : "Not configured: the email was printed to the server console (development).",
+    message: configured ? `Sent to ${staff.email}. Check the inbox and spam folder.` : "Not configured: the email was printed to the server console (development).",
   };
+}
+
+/**
+ * Settings → Environment variables. `set` saves values (an empty value keeps a saved
+ * secret as it is), `remove` deletes saved ones so the server's value applies again.
+ */
+export async function saveEnvVariables(input: { set: Record<string, string>; remove: string[] }): Promise<ActionState> {
+  const admin = await requireAdmin();
+  const changes: [SettableEnvName, string | null][] = [];
+  for (const [name, raw] of Object.entries(input?.set ?? {})) {
+    if (!isSettableEnv(name)) return { ok: false, error: `${name} can't be set here.` };
+    const value = String(raw ?? "").trim();
+    if (!value) continue;
+    if (value.length > 4000 || /[\r\n]/.test(value)) return { ok: false, error: `${name}: value must be one line, at most 4000 characters.` };
+    changes.push([name, value]);
+  }
+  for (const name of input?.remove ?? []) {
+    if (!isSettableEnv(name)) return { ok: false, error: `${name} can't be set here.` };
+    if (!changes.some(([n]) => n === name)) changes.push([name, null]);
+  }
+  if (!changes.length) return { ok: true, message: "Nothing to save." };
+  await writeEnv(changes);
+  // Names only: values may be secrets.
+  await logActivity({
+    entityType: "settings",
+    entityId: SETTINGS_ENTITY_ID,
+    action: "env_changed",
+    actorType: "admin",
+    actorId: admin.userId,
+    diff: Object.fromEntries(changes.map(([n, v]) => [n, v === null ? "removed" : "set"])),
+  });
+  revalidatePath("/admin", "layout");
+  const set = changes.filter(([, v]) => v !== null).length;
+  const removed = changes.length - set;
+  return { ok: true, message: `Saved. ${set ? `${set} set` : ""}${set && removed ? ", " : ""}${removed ? `${removed} removed` : ""}. Takes effect within 15 seconds, no redeploy needed.` };
 }

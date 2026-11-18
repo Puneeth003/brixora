@@ -185,7 +185,7 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
         created_at: u.created_at,
       }
     : null;
-  const mailReady = mailConfigured || process.env.NODE_ENV !== "production";
+  const mailReady = (await mailConfigured()) || process.env.NODE_ENV !== "production";
 
   return (
     <>

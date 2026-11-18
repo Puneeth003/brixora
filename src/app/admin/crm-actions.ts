@@ -529,7 +529,7 @@ export async function changeOwnPassword(_prev: ActionState, formData: FormData):
   // Sign out everywhere, including here, so a leaked session dies with the old password.
   await db.run("DELETE FROM sessions WHERE user_id = ?", [staff.userId]);
   await logActivity({ entityType: "user", entityId: staff.userId, action: "password_changed", actorType: "admin", actorId: staff.userId });
-  if (mailConfigured || process.env.NODE_ENV !== "production") {
+  if ((await mailConfigured()) || process.env.NODE_ENV !== "production") {
     await sendMail({ to: staff.email, ...passwordChangedEmail({ name: u?.name ?? null }) }).catch(() => {});
   }
   await endSession("admin");
