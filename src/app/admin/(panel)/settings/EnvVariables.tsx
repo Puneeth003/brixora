@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { saveEnvVariables } from "@/app/admin/settings-actions";
 import type { ActionState } from "@/lib/types";
 
 // Hostinger-style environment variable editor: Key / Value rows, add, delete and
-// "Import .env". Saved secrets are never sent to the browser; their row shows a mask and
+// "Import .env". Deleting asks first; a saved variable is then removed straight away.
+// Saved secrets are never sent to the browser; their row shows a mask and
 // an empty value keeps them.
 
 export type EnvVar = { name: string; group: string; secret: boolean; hint: string; saved: boolean; value: string; onServer: boolean };
@@ -59,6 +60,13 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
   const [dotenv, setDotenv] = useState("");
   const [state, setState] = useState<ActionState>(null);
   const [pending, startTransition] = useTransition();
+  const [confirming, setConfirming] = useState<Row | null>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (confirming) dialog.current?.showModal();
+    else dialog.current?.close();
+  }, [confirming]);
 
   const used = new Set(rows.map((r) => r.name));
   const update = (id: number, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -109,6 +117,29 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
     );
   }
 
+  const dropRow = (id: number) => setRows((rs) => (rs.length > 1 ? rs.filter((x) => x.id !== id) : [row()]));
+
+  function askDelete(r: Row) {
+    // An empty row has nothing to lose.
+    if (!r.name && !r.value) return dropRow(r.id);
+    setConfirming(r);
+  }
+
+  function confirmDelete() {
+    const r = confirming;
+    setConfirming(null);
+    if (!r) return;
+    dropRow(r.id);
+    if (r.name && savedNames.includes(r.name)) {
+      startTransition(async () => {
+        const res = await saveEnvVariables({ set: {}, remove: [r.name] });
+        setState(res?.ok ? { ok: true, message: `${r.name} deleted.` } : res);
+      });
+    } else {
+      setState({ ok: true, message: `${r.name || "Row"} removed. It was never saved.` });
+    }
+  }
+
   function save() {
     const set: Record<string, string> = {};
     for (const r of rows) {
@@ -156,7 +187,8 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
               </select>
               <button
                 type="button"
-                onClick={() => setRows((rs) => (rs.length > 1 ? rs.filter((x) => x.id !== r.id) : [row()]))}
+                onClick={() => askDelete(r)}
+                disabled={pending}
                 aria-label={`Delete ${r.name || "row"}`}
                 title="Delete"
                 className="btn-secondary row-span-2 grid h-[2.6rem] place-items-center px-0 text-[var(--s-late)] sm:col-start-3 sm:row-span-1 sm:row-start-1"
@@ -245,6 +277,36 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
         </button>
         <Status state={state} />
       </div>
+
+      <dialog
+        ref={dialog}
+        onClose={() => setConfirming(null)}
+        aria-labelledby="env-delete-title"
+        className="m-auto w-[min(26rem,calc(100vw-2rem))] rounded-2xl border border-[var(--s-border)] bg-white p-6 text-[var(--s-text)] shadow-xl backdrop:bg-black/40"
+      >
+        <h3 id="env-delete-title" className="text-base font-extrabold">
+          Delete {confirming?.name || "this row"}?
+        </h3>
+        <p className="mt-2 text-sm text-[var(--s-text-2)]">
+          {confirming?.name && savedNames.includes(confirming.name)
+            ? byName.get(confirming.name)?.onServer
+              ? "The value saved here is removed now. The website goes back to the value set in the hosting panel."
+              : "The value saved here is removed now. Anything that uses it (WhatsApp or email) stops working until you set it again."
+            : "This row hasn't been saved yet, so nothing changes on the website."}
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" autoFocus onClick={() => setConfirming(null)} className="btn-secondary px-4 py-2 text-sm">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={confirmDelete}
+            className="btn-primary bg-[var(--s-late)] px-4 py-2 text-sm hover:bg-[var(--s-late)] hover:opacity-90"
+          >
+            Delete
+          </button>
+        </div>
+      </dialog>
     </div>
   );
 }
