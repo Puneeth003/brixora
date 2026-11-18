@@ -39,27 +39,29 @@ export const TEMPLATES: { key: TemplateName; category: "Authentication" | "Utili
   { key: "staff_invite", category: "Utility", purpose: "New staff member invited", params: ["name", "link"], sample: ["Priya", "https://brixora.in/admin/forgot-password"] },
 ];
 
-export type TemplateSetting = { name: string; lang: string; enabled: boolean };
+export type TemplateSetting = { name: string; lang: string; enabled: boolean; added: boolean };
 
 /**
- * Settings → WhatsApp templates: the name and language each template has in Meta, and
- * whether it's sent at all. Stored in app_config as "tpl:<key>" (JSON). Unset means the
- * key itself, WHATSAPP_TEMPLATE_LANG and on.
+ * Settings → WhatsApp templates: which Meta template (name + language) each website
+ * message uses. Stored in app_config as "tpl:<key>" (JSON). A message is only sent once
+ * a template has been added for it, except the login code, which falls back to
+ * "otp_login" so sign-in never breaks.
  */
 export async function templateSettings(): Promise<Record<TemplateName, TemplateSetting>> {
   const rows = await db.all<{ name: string; value: string }>("SELECT name, value FROM app_config WHERE name LIKE 'tpl:%'");
   const lang = (await env("WHATSAPP_TEMPLATE_LANG")) || "en";
   const out = {} as Record<TemplateName, TemplateSetting>;
   for (const t of TEMPLATES) {
+    const row = rows.find((r) => r.name === `tpl:${t.key}`);
     let saved: Partial<TemplateSetting> = {};
     try {
-      saved = JSON.parse(rows.find((r) => r.name === `tpl:${t.key}`)?.value ?? "{}");
+      saved = JSON.parse(row?.value ?? "{}");
     } catch {}
     out[t.key] = {
       name: saved.name || t.key,
       lang: saved.lang || lang,
-      // The login code can't be switched off: nobody could sign in.
-      enabled: t.key === "otp_login" ? true : saved.enabled !== false,
+      added: Boolean(row),
+      enabled: t.key === "otp_login" || Boolean(row),
     };
   }
   return out;

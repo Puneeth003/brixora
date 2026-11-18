@@ -7,7 +7,7 @@ import { encrypt } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { normalizeIndianPhone } from "@/lib/format";
-import { graphVersion, sendTemplateTest, TEMPLATES, whatsappConnection, type TemplateName, type TemplateSetting } from "@/lib/whatsapp";
+import { graphVersion, sendTemplateTest, TEMPLATES, whatsappConnection, type TemplateName } from "@/lib/whatsapp";
 import type { ActionState } from "@/lib/types";
 
 // Connects the brokerage's existing WhatsApp Business app number to the Cloud API
@@ -115,29 +115,33 @@ export async function disconnectWhatsApp(): Promise<ActionState> {
 const TEMPLATE_NAME = /^[a-z0-9_]{1,512}$/;
 const LANG = /^[a-z]{2,3}(_[A-Z]{2})?$/;
 
-/** Settings → WhatsApp templates: Meta name, language and on/off for each template. */
-export async function saveTemplateSettings(input: Record<string, TemplateSetting>): Promise<ActionState> {
+/** Settings → WhatsApp templates → Add / Change: use this Meta template for a website message. */
+export async function addTemplate(input: { key: string; name: string; lang: string }): Promise<ActionState> {
   const admin = await requireAdmin();
-  const values: [string, string][] = [];
-  for (const t of TEMPLATES) {
-    const v = input?.[t.key];
-    if (!v) continue;
-    const name = String(v.name ?? "").trim();
-    const lang = String(v.lang ?? "").trim();
-    if (!TEMPLATE_NAME.test(name)) return { ok: false, error: `${t.key}: the Meta name may only use lowercase letters, digits and _.` };
-    if (!LANG.test(lang)) return { ok: false, error: `${t.key}: language must look like en or en_US.` };
-    values.push([`tpl:${t.key}`, JSON.stringify({ name, lang, enabled: t.key === "otp_login" ? true : Boolean(v.enabled) })]);
-  }
-  for (const [name, value] of values) await setConfig(name, value);
-  await logActivity({
-    entityType: "settings",
-    entityId: SETTINGS_ENTITY_ID,
-    action: "templates_changed",
-    actorType: "admin",
-    actorId: admin.userId,
-  });
+  const t = TEMPLATES.find((x) => x.key === input?.key);
+  if (!t) return { ok: false, error: "Choose which website message this template is for." };
+  const name = String(input.name ?? "").trim();
+  const lang = String(input.lang ?? "").trim();
+  if (!TEMPLATE_NAME.test(name)) return { ok: false, error: "The Meta template name may only use lowercase letters, digits and _." };
+  if (!LANG.test(lang)) return { ok: false, error: "Language must look like en or en_US." };
+  await setConfig(`tpl:${t.key}`, JSON.stringify({ name, lang }));
+  await logActivity({ entityType: "settings", entityId: SETTINGS_ENTITY_ID, action: "templates_changed", actorType: "admin", actorId: admin.userId, diff: { [t.key]: `${name} (${lang})` } });
   revalidatePath("/admin/settings");
-  return { ok: true, message: "Template settings saved. They apply to the next message." };
+  return { ok: true, message: `${t.purpose} now uses ${name} (${lang}).` };
+}
+
+/** Settings → WhatsApp templates → Remove: the website stops sending this message. */
+export async function removeTemplate(key: string): Promise<ActionState> {
+  const admin = await requireAdmin();
+  const t = TEMPLATES.find((x) => x.key === key);
+  if (!t) return { ok: false, error: "Unknown template." };
+  await db.run("DELETE FROM app_config WHERE name = ?", [`tpl:${t.key}`]);
+  await logActivity({ entityType: "settings", entityId: SETTINGS_ENTITY_ID, action: "templates_changed", actorType: "admin", actorId: admin.userId, diff: { [t.key]: "removed" } });
+  revalidatePath("/admin/settings");
+  return {
+    ok: true,
+    message: t.key === "otp_login" ? "Removed. Login codes go back to the default otp_login template." : `Removed. The website no longer sends "${t.purpose}".`,
+  };
 }
 
 /** Sends one template with its sample values to a test number. */
