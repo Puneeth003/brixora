@@ -153,7 +153,14 @@ export function OrganizationForm({
 export type SiteDetailField = { key: string; label: string; hint: string; value: string; required: boolean };
 
 /** Brand name and public contact details. A contact field left empty is hidden on the website. */
-export function SiteDetailsForm({ fields }: { fields: SiteDetailField[] }) {
+export function SiteDetailsForm({
+  fields,
+  whatsapp,
+}: {
+  fields: SiteDetailField[];
+  /** BROKERAGE_ENQUIRY_WHATSAPP / WHATSAPP_PHONE_NUMBER_ID (same values as Environment variables). */
+  whatsapp: { enquiryTo: string; phoneNumberId: string; connected: string | null };
+}) {
   const [state, action, pending] = useActionState(saveSiteDetails, null);
   return (
     <form action={action} className="space-y-5">
@@ -181,6 +188,46 @@ export function SiteDetailsForm({ fields }: { fields: SiteDetailField[] }) {
             <p className="mt-1 text-xs text-[var(--s-muted)]">{f.required ? `${f.hint}. Required.` : `${f.hint}. Leave empty to hide it.`}</p>
           </div>
         ))}
+      </div>
+      <div className="space-y-4 border-t border-[var(--s-border)] pt-5">
+        <h3 className="text-sm font-extrabold text-[var(--s-text)]">WhatsApp</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label" htmlFor="site-enquiry-wa">
+              Enquiry alerts go to
+            </label>
+            <input
+              id="site-enquiry-wa"
+              name="enquiry_whatsapp"
+              defaultValue={whatsapp.enquiryTo}
+              inputMode="tel"
+              placeholder="e.g. 919740913107"
+              className="input"
+            />
+            <p className="mt-1 text-xs text-[var(--s-muted)]">
+              The team&apos;s WhatsApp for new-enquiry alerts (BROKERAGE_ENQUIRY_WHATSAPP). It must be a different number from the one the website sends from.
+              Empty: the WhatsApp number above.
+            </p>
+          </div>
+          <div>
+            <label className="label" htmlFor="site-wa-phone-id">
+              Sending number&apos;s Phone number ID
+            </label>
+            <input
+              id="site-wa-phone-id"
+              name="wa_phone_number_id"
+              defaultValue={whatsapp.phoneNumberId}
+              inputMode="numeric"
+              placeholder="From Meta → WhatsApp → API Setup"
+              className="input font-mono"
+            />
+            <p className="mt-1 text-xs text-[var(--s-muted)]">
+              {whatsapp.connected
+                ? `Not used while ${whatsapp.connected} is connected in Settings → WhatsApp.`
+                : "WHATSAPP_PHONE_NUMBER_ID: used with WHATSAPP_TOKEN (Environment variables) to send messages."}
+            </p>
+          </div>
+        </div>
       </div>
       <div className="flex items-center gap-3">
         <button disabled={pending} className="btn-primary px-4 py-2 text-sm">

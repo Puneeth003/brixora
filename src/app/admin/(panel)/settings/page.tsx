@@ -140,6 +140,10 @@ async function OrganizationSection() {
     defaultCity: site.defaultCity,
     ...site.brokerage,
   };
+  const wa = await envs("BROKERAGE_ENQUIRY_WHATSAPP", "WHATSAPP_PHONE_NUMBER_ID");
+  // Hosting-panel placeholders such as "<LATER: …>" show as empty.
+  const real = (v: string | undefined) => (v && !/[<>]|\bLATER\b/.test(v) ? v.trim() : "");
+  const conn = await whatsappConnection();
   // Before the first save the form shows what the website currently uses.
   const fields = SITE_FIELDS.map((f) => ({ key: f.key, label: f.label, hint: f.hint, required: f.required, value: saved[f.key] ?? fallback[f.key] ?? "" }));
   return (
@@ -153,7 +157,14 @@ async function OrganizationSection() {
         />
       </Card>
       <Card title="Website details" description="Brand name and the contact details shown across the public site, emails and legal pages. Saving updates every page straight away, with no redeploy. A contact field left empty isn't shown anywhere on the website.">
-        <SiteDetailsForm fields={fields} />
+        <SiteDetailsForm
+          fields={fields}
+          whatsapp={{
+            enquiryTo: real(wa.BROKERAGE_ENQUIRY_WHATSAPP),
+            phoneNumberId: real(wa.WHATSAPP_PHONE_NUMBER_ID),
+            connected: conn?.source === "connected" ? (conn.displayPhone ?? "the connected number") : null,
+          }}
+        />
       </Card>
     </>
   );

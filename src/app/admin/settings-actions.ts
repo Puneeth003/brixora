@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin, requireStaff } from "@/lib/auth";
 import { diffFields, logActivity, SETTINGS_ENTITY_ID } from "@/lib/activity";
 import { db } from "@/lib/db";
+import { normalizeIndianPhone } from "@/lib/format";
 import { isSettableEnv, writeEnv, type SettableEnvName } from "@/lib/env";
 import { SITE_FIELDS, savedSiteDetails } from "@/lib/site-settings";
 import { mailConfigured, sendMail, testEmail, mailErrorReason } from "@/lib/mail";
@@ -137,6 +138,11 @@ export async function saveSiteDetails(_prev: ActionState, formData: FormData): P
   const wa = get("whatsapp").replace(/\D/g, "");
   if (get("whatsapp") && !/^\d{10,15}$/.test(wa)) return { ok: false, error: "WhatsApp must be 10–15 digits with country code, e.g. 919845012345." };
   if (get("phone") && !/^[0-9+()\-\s]{6,20}$/.test(get("phone"))) return { ok: false, error: "Phone may contain only digits, spaces, +, - and brackets." };
+  const enquiryRaw = str(formData, "enquiry_whatsapp");
+  const enquiryTo = normalizeIndianPhone(enquiryRaw) ?? enquiryRaw.replace(/\D/g, "");
+  if (enquiryRaw && !/^\d{10,15}$/.test(enquiryTo)) return { ok: false, error: "Enquiry alerts number must be 10–15 digits with country code, e.g. 919740913107." };
+  const phoneNumberId = str(formData, "wa_phone_number_id");
+  if (phoneNumberId && !/^\d{5,30}$/.test(phoneNumberId)) return { ok: false, error: "Phone number ID is digits only (Meta → WhatsApp → API Setup)." };
 
   const before = await savedSiteDetails();
   for (const [key, raw] of values) {
@@ -148,6 +154,11 @@ export async function saveSiteDetails(_prev: ActionState, formData: FormData): P
   if (Object.keys(changes).length) {
     await logActivity({ entityType: "settings", entityId: SETTINGS_ENTITY_ID, action: "site_details_changed", actorType: "admin", actorId: admin.userId, diff: changes });
   }
+  // Same storage as Settings → Environment variables; empty removes the saved value.
+  await writeEnv([
+    ["BROKERAGE_ENQUIRY_WHATSAPP", enquiryTo || null],
+    ["WHATSAPP_PHONE_NUMBER_ID", phoneNumberId || null],
+  ]);
   updateTag("site");
   revalidatePath("/", "layout");
   return { ok: true, message: "Website details saved. Every page shows them now." };
