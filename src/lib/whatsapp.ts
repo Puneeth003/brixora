@@ -332,6 +332,7 @@ export async function sendTemplateTest(template: TemplateName, phone: string) {
 }
 
 export type MetaTemplate = {
+  id: string;
   name: string;
   language: string;
   status: string;
@@ -342,6 +343,10 @@ export type MetaTemplate = {
   body: string;
   footer: string | null;
   buttons: string[];
+  /** Why Meta rejected it (REJECTED only), e.g. INVALID_FORMAT. */
+  rejectedReason: string | null;
+  /** GREEN / YELLOW / RED / UNKNOWN */
+  quality: string | null;
 };
 
 /** The templates as designed in Meta (WhatsApp Manager), or null when the WABA isn't known or Meta can't be reached. */
@@ -351,14 +356,17 @@ export async function metaTemplates(): Promise<MetaTemplate[] | null> {
   type Component = { type: string; format?: string; text?: string; buttons?: { text?: string }[] };
   try {
     const res = await fetch(
-      `https://graph.facebook.com/${await graphVersion()}/${conn.wabaId}/message_templates?fields=name,status,language,category,components&limit=200`,
+      `https://graph.facebook.com/${await graphVersion()}/${conn.wabaId}/message_templates?fields=id,name,status,language,category,components,rejected_reason,quality_score&limit=200`,
       { headers: { Authorization: `Bearer ${conn.token}` }, cache: "no-store", signal: AbortSignal.timeout(10_000) },
     );
     if (!res.ok) return null;
-    const json = (await res.json()) as { data?: { name: string; status: string; language: string; category: string; components?: Component[] }[] };
+    const json = (await res.json()) as {
+      data?: { id: string; name: string; status: string; language: string; category: string; components?: Component[]; rejected_reason?: string; quality_score?: { score?: string } }[];
+    };
     return (json.data ?? []).map((t) => {
       const part = (type: string) => t.components?.find((c) => c.type === type);
       return {
+        id: t.id,
         name: t.name,
         language: t.language,
         status: t.status,
@@ -368,6 +376,8 @@ export async function metaTemplates(): Promise<MetaTemplate[] | null> {
         body: part("BODY")?.text ?? "",
         footer: part("FOOTER")?.text ?? null,
         buttons: (part("BUTTONS")?.buttons ?? []).map((b) => b.text ?? "").filter(Boolean),
+        rejectedReason: t.rejected_reason && t.rejected_reason !== "NONE" ? t.rejected_reason : null,
+        quality: t.quality_score?.score ?? null,
       };
     });
   } catch {

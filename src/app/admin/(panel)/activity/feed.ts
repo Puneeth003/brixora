@@ -436,6 +436,8 @@ const SETTINGS_VERBS: Record<string, string> = {
   env_changed: "changed environment variables",
   templates_changed: "changed WhatsApp template settings",
   site_details_changed: "changed the website details",
+  template_created: "submitted a WhatsApp template",
+  template_deleted: "deleted a WhatsApp template",
 };
 
 /** Timeline dot category by action (the part before any ":"); anything else is "listing". */

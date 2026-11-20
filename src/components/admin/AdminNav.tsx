@@ -48,6 +48,7 @@ function sectionsFor(role: "admin" | "agent", counts: Counts): Section[] {
       title: "WhatsApp",
       items: [
         { href: "/admin/broadcasts", label: "Broadcasts", icon: "broadcast" },
+        { href: "/admin/templates", label: "Templates", icon: "template" },
         { href: "/admin/messages", label: "WhatsApp log", icon: "messages", count: counts.failed, tone: "bad" },
       ],
     },

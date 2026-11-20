@@ -9,8 +9,9 @@ const nextConfig: NextConfig = {
     // Hostinger's build box reports dozens of CPUs but has little memory; one worker
     // per CPU (54) aborted page generation with SIGABRT. Two workers is plenty for ~50 pages.
     cpus: 2,
-    // Photos are compressed in the browser and uploaded one per request.
-    serverActions: { bodySizeLimit: "8mb" },
+    // Photos are compressed in the browser and uploaded one per request; WhatsApp
+    // template samples (video / PDF) can be up to 8 MB plus the form overhead.
+    serverActions: { bodySizeLimit: "10mb" },
   },
   images: {
     // Serve images as-is. Hostinger returned 503 from the /_next/image optimiser

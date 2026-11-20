@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { addTemplate, removeTemplate, sendTemplateTestAction } from "@/app/admin/whatsapp-actions";
@@ -281,6 +282,9 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
             {busy === "refresh" ? "Refreshing…" : "Refresh from Meta"}
           </button>
         )}
+        <Link href="/admin/templates/new" className="btn-secondary px-3 py-2 text-sm">
+          Create a template
+        </Link>
         <span className="text-xs text-[var(--s-muted)]">
           {meta ? `${meta.length} template${meta.length === 1 ? "" : "s"} found in Meta · ` : ""}
           {added.length} added · {remaining} website message{remaining === 1 ? "" : "s"} without a template
