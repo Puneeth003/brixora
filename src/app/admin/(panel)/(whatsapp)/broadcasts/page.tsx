@@ -71,14 +71,9 @@ export default async function BroadcastsPage({ searchParams }: PageProps<"/admin
         title="Broadcasts"
         description="Send an approved WhatsApp template to many people at once, now or on a schedule, and see who got it, read it and replied."
         actions={
-          <>
-            <Link href="/admin/broadcasts/opt-outs" className="btn-secondary px-4 py-2 text-sm">
-              Opt-outs
-            </Link>
-            <Link href="/admin/broadcasts/new" className="btn-primary px-4 py-2 text-sm">
-              + New broadcast
-            </Link>
-          </>
+          <Link href="/admin/broadcasts/new" className="btn-primary px-4 py-2 text-sm">
+            + New broadcast
+          </Link>
         }
       />
 

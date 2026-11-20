@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { NAV_ICONS } from "./NavIcons";
 
 type Counts = { submissions: number; requests: number; failed: number; followUps: number; unread: number; visits: number; enquiries: number };
-type Item = { href: string; label: string; icon: string; count?: number; tone?: "warn" | "bad" };
+type Item = { href: string; label: string; icon: string; count?: number; tone?: "warn" | "bad"; /** Other paths that highlight this item. */ match?: string[] };
 type Section = { title?: string; items: Item[] };
 
 function sectionsFor(role: "admin" | "agent", counts: Counts): Section[] {
@@ -45,14 +45,13 @@ function sectionsFor(role: "admin" | "agent", counts: Counts): Section[] {
       ],
     },
     {
-      title: "WhatsApp",
+      title: "System",
       items: [
-        { href: "/admin/broadcasts", label: "Broadcasts", icon: "broadcast" },
-        { href: "/admin/templates", label: "Templates", icon: "template" },
-        { href: "/admin/messages", label: "WhatsApp log", icon: "messages", count: counts.failed, tone: "bad" },
+        // Broadcasts, Templates, Message log and Opt-outs are tabs inside this one item.
+        { href: "/admin/broadcasts", label: "WhatsApp", icon: "messages", count: counts.failed, tone: "bad", match: ["/admin/templates", "/admin/messages"] },
+        { href: "/admin/settings", label: "Settings", icon: "settings" },
       ],
     },
-    { title: "System", items: [{ href: "/admin/settings", label: "Settings", icon: "settings" }] },
   ];
 }
 
@@ -64,7 +63,7 @@ function NavList({ sections, onNavigate }: { sections: Section[]; onNavigate?: (
         <div key={i}>
           {s.title && <p className="px-4 pb-1 text-[11px] font-bold tracking-wider text-white/40 uppercase">{s.title}</p>}
           {s.items.map((it) => {
-            const active = it.href === "/admin" ? pathname === it.href : pathname.startsWith(it.href);
+            const active = it.href === "/admin" ? pathname === it.href : [it.href, ...(it.match ?? [])].some((p) => pathname.startsWith(p));
             return (
               <Link key={it.href} href={it.href} onClick={onNavigate} className="admin-nav-item" aria-current={active ? "page" : undefined}>
                 {NAV_ICONS[it.icon]}

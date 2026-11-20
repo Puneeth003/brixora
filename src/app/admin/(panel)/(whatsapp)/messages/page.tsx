@@ -5,7 +5,7 @@ import { displayPhone, formatDateTime } from "@/lib/format";
 import { Empty, PageHeader, Table, Tabs } from "@/components/admin/ui";
 import { MessageStatusBadge } from "@/components/StatusBadge";
 import type { Message } from "@/lib/types";
-import { retryWhatsApp } from "../../actions";
+import { retryWhatsApp } from "@/app/admin/actions";
 
 export const metadata: Metadata = { title: "WhatsApp messages" };
 
