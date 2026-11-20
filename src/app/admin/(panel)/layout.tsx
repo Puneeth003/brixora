@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { getSite } from "@/lib/site-settings";
 import { fromNow } from "@/lib/time";
 import { AdminSidebar, UserCard } from "@/components/admin/AdminNav";
+import { SectionTabs } from "@/components/admin/SectionTabs";
 import { adminSignOut } from "../actions";
 
 export const metadata: Metadata = {
@@ -55,6 +56,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
   };
   const themeVars = { "--brand": color("brand_color"), "--sidebar-bg": color("sidebar_color") } as React.CSSProperties;
 
+  const counts = { submissions, requests, failed, followUps, unread, visits, enquiries };
   const displayName = staff.name ?? staff.email;
   const signOut = (
     <form action={adminSignOut}>
@@ -67,7 +69,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
       <AdminSidebar
         role={staff.role}
         brandName={site.name}
-        counts={{ submissions, requests, failed, followUps, unread, visits, enquiries }}
+        counts={counts}
         footer={<UserCard name={displayName} email={staff.email} role={staff.role} signOut={signOut} />}
       />
       <div className="flex min-w-0 flex-1 flex-col md:py-3 md:pr-3">
@@ -88,6 +90,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
                 environment variables to turn it back on.
               </p>
             )}
+            <SectionTabs role={staff.role} counts={counts} />
             {children}
           </main>
         </div>

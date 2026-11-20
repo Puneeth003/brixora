@@ -4,79 +4,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { NAV_ICONS } from "./NavIcons";
+import { locate, navGroups, type Counts, type NavGroup } from "./nav-sections";
 
-type Counts = { submissions: number; requests: number; failed: number; followUps: number; unread: number; visits: number; enquiries: number };
-type Item = { href: string; label: string; icon: string; count?: number; tone?: "warn" | "bad"; /** Other paths that highlight this item. */ match?: string[] };
-type Section = { title?: string; items: Item[] };
-
-function sectionsFor(role: "admin" | "agent", counts: Counts): Section[] {
-  const crm: Item[] = [
-    { href: "/admin/clients", label: "Clients", icon: "clients", count: counts.followUps, tone: "warn" },
-    { href: "/admin/inbox", label: "Inbox", icon: "inbox", count: counts.unread, tone: "bad" },
-    { href: "/admin/calendar", label: "Calendar", icon: "calendar" },
-  ];
-  const visits: Item = { href: "/admin/verifications", label: "Site visits", icon: "verify", count: counts.visits, tone: "warn" };
-  if (role !== "admin") {
-    return [
-      { items: [{ href: "/admin", label: "Dashboard", icon: "dashboard" }, visits, ...crm] },
-      { title: "Account", items: [{ href: "/admin/settings", label: "Settings", icon: "settings" }] },
-    ];
-  }
-  return [
-    { items: [{ href: "/admin", label: "Dashboard", icon: "dashboard" }] },
-    {
-      title: "Listings",
-      items: [
-        { href: "/admin/submissions", label: "Submissions", icon: "submissions", count: counts.submissions, tone: "warn" },
-        visits,
-        { href: "/admin/listings", label: "Listings", icon: "listings" },
-        { href: "/admin/requests", label: "Change requests", icon: "requests", count: counts.requests, tone: "warn" },
-        { href: "/admin/builders", label: "Builders", icon: "builders" },
-      ],
-    },
-    { title: "CRM", items: [...crm, { href: "/admin/enquiries", label: "Enquiries", icon: "enquiries", count: counts.enquiries, tone: "bad" }] },
-    {
-      title: "Team",
-      items: [
-        { href: "/admin/users", label: "Users", icon: "users" },
-        { href: "/admin/workload", label: "Workload", icon: "workload" },
-        { href: "/admin/activity", label: "Activity", icon: "activity" },
-        { href: "/admin/reports", label: "Reports", icon: "reports" },
-      ],
-    },
-    {
-      title: "System",
-      items: [
-        // Broadcasts, Templates, Message log and Opt-outs are tabs inside this one item.
-        { href: "/admin/broadcasts", label: "WhatsApp", icon: "messages", count: counts.failed, tone: "bad", match: ["/admin/templates", "/admin/messages"] },
-        { href: "/admin/settings", label: "Settings", icon: "settings" },
-      ],
-    },
-  ];
-}
-
-function NavList({ sections, onNavigate }: { sections: Section[]; onNavigate?: () => void }) {
+/** The short sidebar: one item per group; the group's pages are tabs in the content area. */
+function NavList({ groups, onNavigate }: { groups: NavGroup[]; onNavigate?: () => void }) {
   const pathname = usePathname();
+  const current = locate(groups, pathname).group;
   return (
-    <nav className="space-y-4">
-      {sections.map((s, i) => (
-        <div key={i}>
-          {s.title && <p className="px-4 pb-1 text-[11px] font-bold tracking-wider text-white/40 uppercase">{s.title}</p>}
-          {s.items.map((it) => {
-            const active = it.href === "/admin" ? pathname === it.href : [it.href, ...(it.match ?? [])].some((p) => pathname.startsWith(p));
-            return (
-              <Link key={it.href} href={it.href} onClick={onNavigate} className="admin-nav-item" aria-current={active ? "page" : undefined}>
-                {NAV_ICONS[it.icon]}
-                <span className="truncate">{it.label}</span>
-                {it.count ? (
-                  <span className="admin-nav-count" data-tone={it.tone}>
-                    {it.count}
-                  </span>
-                ) : null}
-              </Link>
-            );
-          })}
-        </div>
+    <nav className="space-y-0.5">
+      {groups.map((g) => (
+        <Link key={g.label} href={g.href} onClick={onNavigate} className="admin-nav-item" aria-current={current === g ? "page" : undefined}>
+          {NAV_ICONS[g.icon]}
+          <span className="truncate">{g.label}</span>
+          {g.count ? (
+            <span className="admin-nav-count" data-tone={g.tone}>
+              {g.count}
+            </span>
+          ) : null}
+        </Link>
       ))}
     </nav>
   );
@@ -108,7 +53,7 @@ export function AdminSidebar({
   counts: Counts;
   footer: React.ReactNode;
 }) {
-  const sections = sectionsFor(role, counts);
+  const groups = navGroups(role, counts);
   // The drawer closes itself on navigation (NavList onNavigate).
   const [open, setOpen] = useState(false);
 
@@ -119,7 +64,7 @@ export function AdminSidebar({
           <Brand role={role} brandName={brandName} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-          <NavList sections={sections} />
+          <NavList groups={groups} />
         </div>
         <div className="px-3 pt-2 pb-4">{footer}</div>
       </aside>
@@ -139,7 +84,7 @@ export function AdminSidebar({
               <Brand role={role} brandName={brandName} />
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-              <NavList sections={sections} onNavigate={() => setOpen(false)} />
+              <NavList groups={groups} onNavigate={() => setOpen(false)} />
             </div>
             <div className="px-3 pt-2 pb-4">{footer}</div>
           </aside>
