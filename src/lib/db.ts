@@ -14,7 +14,7 @@ export const dbConfigured = Boolean(process.env.DB_USER && process.env.DB_NAME);
 
 // JSON columns, by name. Parsed here so MariaDB (which stores JSON as LONGTEXT) and
 // MySQL behave the same.
-const JSON_COLUMNS = new Set(["amenities", "original_submission", "proposed", "payload", "diff", "property_types", "checklist"]);
+const JSON_COLUMNS = new Set(["amenities", "original_submission", "proposed", "payload", "diff", "property_types", "checklist", "config", "audience", "params"]);
 
 function typeCast(field: TypeCastField, next: () => unknown) {
   if (JSON_COLUMNS.has(field.name)) {
@@ -136,7 +136,10 @@ export type Table =
   | "enquiry_messages"
   | "saved_properties"
   | "site_verifications"
-  | "site_verification_photos";
+  | "site_verification_photos"
+  | "broadcasts"
+  | "broadcast_recipients"
+  | "wa_optouts";
 
 function setClause(row: Record<string, unknown>) {
   const keys = Object.keys(row).filter((k) => row[k] !== undefined);

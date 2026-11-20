@@ -45,12 +45,13 @@ function sectionsFor(role: "admin" | "agent", counts: Counts): Section[] {
       ],
     },
     {
-      title: "System",
+      title: "WhatsApp",
       items: [
-        { href: "/admin/settings", label: "Settings", icon: "settings" },
+        { href: "/admin/broadcasts", label: "Broadcasts", icon: "broadcast" },
         { href: "/admin/messages", label: "WhatsApp log", icon: "messages", count: counts.failed, tone: "bad" },
       ],
     },
+    { title: "System", items: [{ href: "/admin/settings", label: "Settings", icon: "settings" }] },
   ];
 }
 

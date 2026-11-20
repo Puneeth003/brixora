@@ -362,6 +362,10 @@ export function describe(r: FeedRow, count = 1, fullText = false): Entry {
     target ||= savedText("name");
     target = target ? `${entity} ${target}` : `a ${entity}`;
     href = "/admin/builders";
+  } else if (entity === "message" && r.kind.startsWith("broadcast_")) {
+    verb = BROADCAST_VERBS[r.kind] ?? verb;
+    target = savedText("name") ? `broadcast "${savedText("name")}"` : "a broadcast";
+    if (r.kind !== "broadcast_deleted") href = `/admin/broadcasts/${r.target_id}`;
   } else if (entity === "message") {
     target = "a WhatsApp message";
     href = "/admin/messages";
@@ -412,6 +416,16 @@ const SELF_VERBS: Record<string, string> = {
   signed_in: "signed in",
   password_changed: "changed their password",
   password_reset: "reset their password by email",
+};
+
+const BROADCAST_VERBS: Record<string, string> = {
+  broadcast_created: "created",
+  broadcast_pause: "paused",
+  broadcast_resume: "resumed",
+  broadcast_cancel: "cancelled",
+  broadcast_send_now: "started sending",
+  broadcast_retry: "retried failed messages of",
+  broadcast_deleted: "deleted",
 };
 
 const SETTINGS_VERBS: Record<string, string> = {

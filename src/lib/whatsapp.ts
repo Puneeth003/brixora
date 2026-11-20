@@ -73,7 +73,7 @@ const ESSENTIAL: TemplateName[] = ["otp_login", "listing_rejected", "change_reje
 const AUTH_TEMPLATES: TemplateName[] = ["otp_login"];
 
 type Result = { ok: boolean; status?: string; error?: string; suppressed?: boolean };
-type SendResult = { ok: true; waMessageId: string } | { ok: false; error: string };
+export type SendResult = { ok: true; waMessageId: string } | { ok: false; error: string };
 
 /** Meta wants digits only, with country code (e.g. 919876543210). */
 export function normalizePhone(phone: string) {
@@ -173,11 +173,15 @@ async function sendTemplate(to: string, template: string, params: string[]): Pro
   }
 
   const lang = setting?.lang || (await env("WHATSAPP_TEMPLATE_LANG")) || "en";
+  return postTemplate(conn, to, setting?.name || template, lang, components);
+}
+
+/** POSTs one template message. Never throws. */
+async function postTemplate(conn: WhatsAppConnection, to: string, name: string, lang: string, components: unknown[]): Promise<SendResult> {
   // With coexistence the API number is the brokerage's own WhatsApp; it can't message itself.
   if (conn.displayPhone && normalizePhone(conn.displayPhone) === to) {
     return { ok: false, error: "Recipient is the connected WhatsApp number itself. Set BROKERAGE_ENQUIRY_WHATSAPP to another number." };
   }
-
   try {
     const res = await fetch(`https://graph.facebook.com/${await graphVersion()}/${conn.phoneNumberId}/messages`, {
       method: "POST",
@@ -186,17 +190,47 @@ async function sendTemplate(to: string, template: string, params: string[]): Pro
         messaging_product: "whatsapp",
         to,
         type: "template",
-        template: { name: setting?.name || template, language: { code: lang }, components },
+        template: { name, language: { code: lang }, components },
       }),
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: json?.error?.message ?? `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: json?.error?.error_data?.details ?? json?.error?.message ?? `HTTP ${res.status}` };
     return { ok: true, waMessageId: json.messages?.[0]?.id ?? "" };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+export type HeaderMedia = { type: "image" | "video" | "document"; link: string; filename?: string };
+
+/**
+ * Sends any approved Meta template (broadcasts). `body` fills {{1}}…{{n}} in the body,
+ * `header` the text header's variable, `media` an image / video / document header.
+ * Pass `conn` when sending many, so the connection is read once.
+ */
+export async function sendTemplateMessage(
+  to: string,
+  t: { name: string; lang: string; body: string[]; header?: string[]; media?: HeaderMedia | null },
+  conn?: WhatsAppConnection | null,
+): Promise<SendResult> {
+  const c = conn === undefined ? await whatsappConnection() : conn;
+  if (!c) {
+    if (process.env.NODE_ENV === "production") return { ok: false, error: "WhatsApp is not configured" };
+    console.log(`[whatsapp:dev] to=${to} template=${t.name} body=${JSON.stringify(t.body)}`);
+    return { ok: true, waMessageId: `dev-${uuid()}` };
+  }
+  const components: unknown[] = [];
+  if (t.media?.link) {
+    const media: Record<string, string> = { link: t.media.link };
+    if (t.media.type === "document" && t.media.filename) media.filename = t.media.filename;
+    components.push({ type: "header", parameters: [{ type: t.media.type, [t.media.type]: media }] });
+  } else if (t.header?.length) {
+    components.push({ type: "header", parameters: t.header.map((text) => ({ type: "text", text })) });
+  }
+  if (t.body.length) components.push({ type: "body", parameters: t.body.map((text) => ({ type: "text", text })) });
+  return postTemplate(c, normalizePhone(to), t.name, t.lang, components);
 }
 
 async function queue(to: string, template: TemplateName, params: string[], enquiryId?: string | null) {
@@ -303,6 +337,8 @@ export type MetaTemplate = {
   status: string;
   category: string;
   header: string | null;
+  /** TEXT, IMAGE, VIDEO, DOCUMENT or LOCATION; null without a header. */
+  headerFormat: string | null;
   body: string;
   footer: string | null;
   buttons: string[];
@@ -328,6 +364,7 @@ export async function metaTemplates(): Promise<MetaTemplate[] | null> {
         status: t.status,
         category: t.category,
         header: part("HEADER")?.format === "TEXT" ? (part("HEADER")?.text ?? null) : null,
+        headerFormat: part("HEADER")?.format ?? null,
         body: part("BODY")?.text ?? "",
         footer: part("FOOTER")?.text ?? null,
         buttons: (part("BUTTONS")?.buttons ?? []).map((b) => b.text ?? "").filter(Boolean),

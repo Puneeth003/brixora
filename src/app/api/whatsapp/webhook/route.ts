@@ -2,16 +2,18 @@ import { createHmac } from "node:crypto";
 import { db } from "@/lib/db";
 import { safeEqual } from "@/lib/crypto";
 import { env } from "@/lib/env";
+import { optIn, optOut, recordBroadcastReply, recordBroadcastStatus } from "@/lib/broadcast";
 import { normalizePhone } from "@/lib/whatsapp";
 
-// Meta WhatsApp webhook: delivery status updates and inbound STOP / START replies.
+// Meta WhatsApp webhook: delivery status updates (website messages and broadcasts),
+// replies to broadcasts, and inbound STOP / START replies.
 // Configure in Meta App → WhatsApp → Configuration:
 //   Callback URL  https://<your domain>/api/whatsapp/webhook
 //   Verify token  WHATSAPP_VERIFY_TOKEN
 // POSTs are verified with the app secret signature (WHATSAPP_APP_SECRET).
 
 const RANK: Record<string, number> = { queued: 0, sent: 1, delivered: 2, read: 3 };
-const STOP_WORDS = ["STOP", "UNSUBSCRIBE"];
+const STOP_WORDS = ["STOP", "UNSUBSCRIBE", "STOP PROMOTIONS"];
 const START_WORDS = ["START", "SUBSCRIBE"];
 
 type StatusEvent = { id: string; status: string; errors?: { title?: string; message?: string }[] };
@@ -52,12 +54,13 @@ export async function POST(request: Request) {
       const value = change.value ?? {};
 
       for (const s of value.statuses ?? []) {
+        const error = s.errors?.[0]?.message ?? s.errors?.[0]?.title ?? null;
+        if (await recordBroadcastStatus(s.id, s.status, error)) continue;
         const msg = await db.one<{ id: string; status: string }>("SELECT id, status FROM messages WHERE wa_message_id = ? LIMIT 1", [s.id]);
         if (!msg) continue;
         if (s.status === "failed") {
           if ((RANK[msg.status] ?? 0) < RANK.delivered) {
-            const error = s.errors?.[0]?.message ?? s.errors?.[0]?.title ?? "failed";
-            await db.update("messages", { status: "failed", error }, "id = ?", [msg.id]);
+            await db.update("messages", { status: "failed", error: error ?? "failed" }, "id = ?", [msg.id]);
           }
         } else if (s.status in RANK && RANK[s.status] > (RANK[msg.status] ?? -1)) {
           await db.update("messages", { status: s.status, error: null }, "id = ?", [msg.id]);
@@ -67,8 +70,14 @@ export async function POST(request: Request) {
       for (const m of value.messages ?? []) {
         const text = (m.text?.body ?? m.button?.text ?? "").trim().toUpperCase();
         const phone = normalizePhone(m.from);
-        if (STOP_WORDS.includes(text)) await db.update("users", { wa_opt_out: true }, "phone = ?", [phone]);
-        else if (START_WORDS.includes(text)) await db.update("users", { wa_opt_out: false }, "phone = ?", [phone]);
+        await recordBroadcastReply(phone);
+        if (STOP_WORDS.includes(text)) {
+          await db.update("users", { wa_opt_out: true }, "phone = ?", [phone]);
+          await optOut(phone, "reply");
+        } else if (START_WORDS.includes(text)) {
+          await db.update("users", { wa_opt_out: false }, "phone = ?", [phone]);
+          await optIn(phone);
+        }
       }
     }
   }

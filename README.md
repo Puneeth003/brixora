@@ -17,7 +17,7 @@ src/app/admin/(panel)/   dashboard, submissions, listings, change requests, buil
 src/app/admin/crm-actions.ts  CRM, agents, members, replies, own-password server actions
 src/app/media/           public watermarked photos (/media/<uuid>.webp)
 src/app/admin/originals/ private original uploads (admin only)
-src/app/api/             whatsapp/webhook (Meta), cron/expire-listings (daily job)
+src/app/api/             whatsapp/webhook (Meta), cron/expire-listings (daily job), cron/broadcasts (every minute)
 src/lib/db.ts            MySQL pool + query helpers (rows normalised: ISO dates, booleans, parsed JSON)
 src/lib/auth.ts          DB sessions, guards (requireStaff / requireAdmin / requireOwner), rate limiting
 src/lib/crypto.ts        scrypt passwords, TOTP, AES-GCM secret encryption
@@ -28,7 +28,7 @@ src/lib/crm-constants.ts pipeline, client types/sources, activity and agent-type
 src/lib/member.ts        member-account helpers (unread replies)
 src/lib/storage.ts       uploads on disk under UPLOAD_DIR
 db/schema.sql            base tables + public views
-db/migrations/           002 → 009: apply every file in number order after schema.sql (there is no 006)
+db/migrations/           002 → 010: apply every file in number order after schema.sql (there is no 006)
 db/seed.sql              demo listings (generated)
 db/demo-workflow.sql     demo submissions, change requests, enquiries, message log
 db/demo-crm.sql          demo agents/broker, clients, conversations, a visitor member
@@ -73,6 +73,7 @@ mysql -u USER -p DBNAME < db/migrations/005_whatsapp_connection.sql
 mysql -u USER -p DBNAME < db/migrations/007_keep_activity_history.sql
 mysql -u USER -p DBNAME < db/migrations/008_auditor_flow.sql
 mysql -u USER -p DBNAME < db/migrations/009_location_documents_consent.sql
+mysql -u USER -p DBNAME < db/migrations/010_broadcasts.sql
 # optional demo data, in this order:
 mysql -u USER -p DBNAME < db/seed.sql            # listings
 mysql -u USER -p DBNAME < db/demo-workflow.sql   # submissions, requests, enquiries, messages
@@ -91,7 +92,7 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
 
 1. **Database:**
    - hPanel → Databases → MySQL Databases → create a database and user.
-   - With phpMyAdmin → Import, import `db/schema.sql`, then every file in `db/migrations/` in number order (002, 003, 004, 005, 007, 008, 009, …).
+   - With phpMyAdmin → Import, import `db/schema.sql`, then every file in `db/migrations/` in number order (002, 003, 004, 005, 007, 008, 009, 010, …).
    - Optional demo data: `db/seed.sql`, `db/demo-workflow.sql`, `db/demo-crm.sql`.
    - Existing install: import only the migrations you haven't applied, in order.
 2. **Config values** (phpMyAdmin → SQL):
@@ -121,6 +122,10 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
    curl -fsS -H "Authorization: Bearer <CRON_SECRET>" https://<your domain>/api/cron/expire-listings
    ```
    It expires old listings and clears dead sessions and codes. Public pages already hide expired listings, so a missed run is harmless.
+   **Broadcasts cron**, every minute (`* * * * *`), sends scheduled WhatsApp broadcasts and resumes long ones after a restart:
+   ```
+   curl -fsS -H "Authorization: Bearer <CRON_SECRET>" https://<your domain>/api/cron/broadcasts
+   ```
 9. **Meta webhook:**
    - Callback URL: `https://<your domain>/api/whatsapp/webhook`, with the `WHATSAPP_VERIFY_TOKEN` you chose.
    - Subscribe to `messages`. If you connect the WhatsApp Business app number (step 9a), also subscribe to `account_update`, `smb_message_echoes`, `history` and `smb_app_state_sync`.

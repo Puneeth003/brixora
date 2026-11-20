@@ -212,6 +212,10 @@ export function summariseDiff(action: string, diff: unknown, fmt: DiffFormat): s
   if (action === "deleted") return "";
   if (action === "signed_in") return typeof d.ip === "string" && d.ip ? `From ${d.ip}` : "";
   if (action === "whatsapp_connected" || action === "whatsapp_disconnected") return typeof d.number === "string" ? d.number : "";
+  if (action.startsWith("broadcast_")) {
+    const n = typeof d.recipients === "number" ? `${d.recipients} recipient${d.recipients === 1 ? "" : "s"}` : "";
+    return [typeof d.template === "string" ? `Template ${d.template}` : "", n].filter(Boolean).join(" · ");
+  }
   if (action === "env_changed") return Object.entries(d).map(([k, v]) => `${k} ${v}`).join(", ");
   if (action === "invite_sent") {
     // Newer entries carry the full outcome ("Invite sent by email to …. Not sent: …").
