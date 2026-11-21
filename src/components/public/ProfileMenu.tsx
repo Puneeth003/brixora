@@ -60,7 +60,7 @@ function initials(name: string | null) {
 
 /** Shown while the session is being read. Sized like the profile icon so the nav doesn't jump. */
 export function ProfileFallback() {
-  return <span aria-hidden className="hidden size-11 animate-pulse rounded-full bg-zinc-100 sm:block" />;
+  return <span aria-hidden className="hidden h-11 w-11 animate-pulse rounded-full bg-zinc-100 sm:block lg:w-36" />;
 }
 
 /** Header profile: an "Owner login" icon when signed out, an avatar with a dropdown when signed in. */
@@ -148,13 +148,13 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
         aria-controls={open ? `${id}-menu` : undefined}
         aria-label={`${open ? "Close" : "Open"} profile menu${unread > 0 ? ` (${unread} unread ${unread === 1 ? "reply" : "replies"})` : ""}`}
         title={user ? (firstName ?? "My account") : "My listings & owner login"}
-        className={`flex items-center rounded-full p-1 transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:outline-none ${open ? "bg-zinc-100" : ""}`}
+        className={`flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:outline-none lg:pr-3 ${open ? "bg-zinc-100" : ""}`}
       >
-        {/* Icon only: the name and "My account" label were dropped to keep the header short. */}
         <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-b from-brand-500 to-brand-700 text-sm font-semibold text-white shadow-sm">
           {mono ?? <UserIcon className="size-5" />}
           {unread > 0 && <span className="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-red-500" aria-hidden />}
         </span>
+        <span className="hidden text-sm font-semibold whitespace-nowrap text-zinc-800 lg:block lg:text-base">My listings</span>
       </button>
 
       {open && (
