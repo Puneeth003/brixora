@@ -43,6 +43,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const body = await request.text();
   if (!(await validSignature(body, request.headers.get("x-hub-signature-256")))) {
+    // Remembered for Settings → WhatsApp → Check connection: Meta reached us, but the
+    // signature didn't match (wrong or missing WHATSAPP_APP_SECRET).
+    const reason = (await env("WHATSAPP_APP_SECRET")) ? "signature" : "no_secret";
+    await db
+      .run("INSERT INTO app_config (name, value) VALUES ('webhook_last_rejected', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [`${Date.now()}:${reason}`])
+      .catch(() => {});
     return Response.json({ error: "Invalid signature" }, { status: 401 });
   }
 

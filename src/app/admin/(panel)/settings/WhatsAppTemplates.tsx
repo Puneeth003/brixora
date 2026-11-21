@@ -239,6 +239,7 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
   const router = useRouter();
   const [testPhone, setTestPhone] = useState("");
   const [state, setState] = useState<ActionState>(null);
+  const [testResult, setTestResult] = useState<{ key: string; state: ActionState } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [dialog, setDialog] = useState<{ editing: TemplateRow | null; preselect?: string } | null>(null);
@@ -260,10 +261,11 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
   }
 
   function test(r: TemplateRow) {
-    if (!testPhone.trim()) return setState({ ok: false, error: "Enter a test phone number first." });
+    if (!testPhone.trim()) return setTestResult({ key: r.key, state: { ok: false, error: "Enter a test phone number first (above the list)." } });
     setBusy(`test:${r.key}`);
     startTransition(async () => {
-      setState(await sendTemplateTestAction(r.key, testPhone));
+      // Shown right under that template's buttons (the page-level status is far below).
+      setTestResult({ key: r.key, state: await sendTemplateTestAction(r.key, testPhone) });
       setBusy(null);
     });
   }
@@ -332,6 +334,7 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
                   {busy === "test:otp_login" ? "Sending…" : "Send test"}
                 </button>
               </div>
+              {testResult?.key === loginDefault.key && <Status state={testResult.state} />}
             </li>
           )}
           {added.map((r) => {
@@ -364,6 +367,7 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
                     {busy === `remove:${r.key}` ? "Removing…" : "Remove"}
                   </button>
                 </div>
+                {testResult?.key === r.key && <Status state={testResult.state} />}
               </li>
             );
           })}

@@ -268,9 +268,23 @@ export async function checkWhatsApp(): Promise<HealthCheck[]> {
 
   const [secret, verify, appId] = await Promise.all([env("WHATSAPP_APP_SECRET"), env("WHATSAPP_VERIFY_TOKEN"), env("META_APP_ID")]);
   const last = await db.one<{ value: string }>("SELECT value FROM app_config WHERE name = 'webhook_last_at'");
+  const rejected = await db.one<{ value: string }>("SELECT value FROM app_config WHERE name = 'webhook_last_rejected'");
+  const [rejectedMs, rejectedWhy] = (rejected?.value ?? "").split(":");
   // Stored as epoch milliseconds (an ISO string would be turned into a DATETIME by db params).
   const lastAt = last && /^\d+$/.test(last.value) ? new Date(Number(last.value)) : null;
-  add({
+  const when = (d: Date) => d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" });
+  const rejectedAt = /^\d+$/.test(rejectedMs ?? "") ? new Date(Number(rejectedMs)) : null;
+  if (rejectedAt && (!lastAt || rejectedAt > lastAt)) {
+    add({
+      key: "webhook",
+      label: "Webhook",
+      state: "fail",
+      detail:
+        rejectedWhy === "no_secret"
+          ? `Meta reached the site (${when(rejectedAt)}) but WHATSAPP_APP_SECRET isn't set, so the event was refused. Paste the App secret (Meta → App settings → Basic) in Environment variables.`
+          : `Meta reached the site (${when(rejectedAt)}) but the event was refused: its signature doesn't match WHATSAPP_APP_SECRET. Copy the App secret again from Meta → app "Brixora Website" → App settings → Basic, paste it in Environment variables, save, and send a test again.`,
+    });
+  } else add({
     key: "webhook",
     label: "Webhook",
     state: !secret || !verify ? "fail" : lastAt ? "ok" : "warn",

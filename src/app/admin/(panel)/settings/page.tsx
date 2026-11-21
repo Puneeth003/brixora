@@ -8,7 +8,7 @@ import { site } from "@/lib/site";
 import { PageHeader } from "@/components/admin/ui";
 import { ChangePasswordForm } from "@/components/crm/forms";
 import { signOutAllStaff } from "@/app/admin/settings-actions";
-import { brokeragePhone, graphVersion, metaTemplates, normalizePhone, templateSettings, TEMPLATES, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
+import { brokeragePhone, graphVersion, metaTemplates, normalizePhone, phoneProfile, templateSettings, TEMPLATES, whatsappConnection, whatsappEnvProblems } from "@/lib/whatsapp";
 import { formatDateTime } from "@/lib/format";
 import { OrganizationForm, ProfileForm, SiteDetailsForm, TestEmailForm } from "./SettingsForms";
 import { SITE_FIELDS, savedSiteDetails } from "@/lib/site-settings";
@@ -199,12 +199,13 @@ async function WhatsAppSection() {
   const showCoexistence = conn?.source === "connected" || signupReady;
   const envProblems = await whatsappEnvProblems();
   const forwardTo = await brokeragePhone();
-  const selfForward = Boolean(conn?.displayPhone && forwardTo && normalizePhone(conn.displayPhone) === forwardTo);
+  const profile = conn ? await phoneProfile(conn) : null;
+  const selfForward = Boolean(profile?.displayPhone && forwardTo && normalizePhone(profile.displayPhone) === forwardTo);
   const webhookUrl = `${site.url}/api/whatsapp/webhook`;
   const rows = conn
     ? [
-        { label: "Number", value: conn.displayPhone || "—" },
-        { label: "Business name", value: conn.verifiedName || "—" },
+        { label: "Number", value: profile?.displayPhone || "—" },
+        { label: "Business name", value: profile?.verifiedName || "—" },
         { label: "Phone number ID", value: conn.phoneNumberId },
         { label: "WhatsApp Business Account ID", value: conn.wabaId || "—" },
         { label: "Source", value: conn.source === "env" ? "Environment variables (WHATSAPP_TOKEN)" : conn.connectedAt ? `Linked app number, ${formatDateTime(conn.connectedAt)}` : "Linked app number" },

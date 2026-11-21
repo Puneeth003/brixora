@@ -154,6 +154,22 @@ export async function whatsappConnection(): Promise<WhatsAppConnection | null> {
   return { token, phoneNumberId: envPhoneId, wabaId: /^\d+$/.test(wabaId) ? wabaId : null, displayPhone: null, verifiedName: null, connectedAt: null, source: "env" };
 }
 
+/** The number and business name as Meta shows them (for an env-token connection, which doesn't store them). */
+export async function phoneProfile(conn: WhatsAppConnection): Promise<{ displayPhone: string | null; verifiedName: string | null }> {
+  if (conn.displayPhone && conn.verifiedName) return { displayPhone: conn.displayPhone, verifiedName: conn.verifiedName };
+  try {
+    const res = await fetch(`https://graph.facebook.com/${await graphVersion()}/${conn.phoneNumberId}?fields=display_phone_number,verified_name`, {
+      headers: { Authorization: `Bearer ${conn.token}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(6_000),
+    });
+    const json = (await res.json().catch(() => ({}))) as { display_phone_number?: string; verified_name?: string };
+    return { displayPhone: conn.displayPhone ?? json.display_phone_number ?? null, verifiedName: conn.verifiedName ?? json.verified_name ?? null };
+  } catch {
+    return { displayPhone: conn.displayPhone, verifiedName: conn.verifiedName };
+  }
+}
+
 async function sendTemplate(to: string, template: string, params: string[]): Promise<SendResult> {
   const conn = await whatsappConnection();
   const setting = (await templateSettings())[template as TemplateName];
