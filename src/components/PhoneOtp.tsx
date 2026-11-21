@@ -20,6 +20,8 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
+  /** Name already on the account (existing number): shown to confirm or change. */
+  const [savedName, setSavedName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -57,14 +59,17 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
     const res = await verifyLoginCode(e164, code.trim()).catch(() => ({ ok: false as const, error: "Something went wrong. Please try again." }));
     setBusy(false);
     if (!res.ok) return setError(res.error);
-    if (res.needsName) setStep("name");
-    else onVerified();
+    // New number: enter a name. Existing account: show the saved name to confirm or change.
+    setSavedName(res.name);
+    setName(res.name ?? "");
+    setStep("name");
   }
 
   async function submitName(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     if (name.trim().length < 2) return setError("Please enter your name.");
+    if (savedName && name.trim() === savedName) return onVerified();
     setBusy(true);
     const res = await saveOwnerName(name).catch(() => ({ ok: false as const, error: "Something went wrong. Please try again." }));
     setBusy(false);
@@ -111,7 +116,13 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
   if (step === "name") {
     return (
       <form onSubmit={submitName} className="space-y-4">
-        <p className="text-sm text-zinc-600">Your number is verified. What should we call you? You can change it later in My account.</p>
+        {savedName ? (
+          <p className="text-sm text-zinc-600">
+            Welcome back, <strong className="text-zinc-900">{savedName}</strong>. Your number is verified. Is this name right? You can change it here.
+          </p>
+        ) : (
+          <p className="text-sm text-zinc-600">Your number is verified. What should we call you? You can change it later in My account.</p>
+        )}
         <div>
           <label className="label" htmlFor="otp-name">
             Your name

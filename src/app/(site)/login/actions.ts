@@ -58,7 +58,8 @@ export async function sendLoginCode(rawPhone: string): Promise<Result> {
   return { ok: true };
 }
 
-export async function verifyLoginCode(rawPhone: string, rawCode: string): Promise<{ ok: true; needsName: boolean } | { ok: false; error: string }> {
+/** `name` is the account's saved name: null for a new number (ask for it), else shown to confirm. */
+export async function verifyLoginCode(rawPhone: string, rawCode: string): Promise<{ ok: true; name: string | null } | { ok: false; error: string }> {
   if (!dbConfigured) return { ok: false, error: "Sign-in isn't configured yet." };
   const phone = normalizeIndianPhone(rawPhone);
   const code = rawCode.replace(/\D/g, "");
@@ -106,5 +107,5 @@ export async function verifyLoginCode(rawPhone: string, rawCode: string): Promis
   await db.update("users", { last_login_at: new Date() }, "id = ?", [userId]);
   await startSession("owner", userId);
   const user = await db.one<{ name: string | null }>("SELECT name FROM users WHERE id = ?", [userId]);
-  return { ok: true, needsName: !user?.name?.trim() };
+  return { ok: true, name: user?.name?.trim() || null };
 }
