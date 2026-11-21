@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { hasOwnerSession, sendLoginCode, verifyLoginCode } from "@/app/(site)/login/actions";
+import { ownerSessionState, saveOwnerName, sendLoginCode, verifyLoginCode } from "@/app/(site)/login/actions";
 
 function toE164(input: string) {
   const d = input.replace(/\D/g, "");
@@ -11,20 +11,22 @@ function toE164(input: string) {
 }
 
 /**
- * Phone → WhatsApp OTP sign-in. The server sends the code on WhatsApp and sets the owner
- * session cookie. Calls onVerified once signed in (immediately if already signed in).
+ * Phone → WhatsApp OTP sign-in → (first time only) name. The server sends the code on
+ * WhatsApp and sets the owner session cookie. Calls onVerified once signed in and named
+ * (immediately if already). The name is changed later in My account.
  */
 export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?: string }) {
-  const [step, setStep] = useState<"checking" | "phone" | "code">("checking");
+  const [step, setStep] = useState<"checking" | "phone" | "code" | "name">("checking");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
-    hasOwnerSession()
-      .then((signedIn) => (signedIn ? onVerified() : setStep("phone")))
+    ownerSessionState()
+      .then((s) => (!s.signedIn ? setStep("phone") : s.needsName ? setStep("name") : onVerified()))
       .catch(() => setStep("phone"));
   }, [onVerified]);
 
@@ -53,6 +55,18 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
     const e164 = toE164(phone)!;
     setBusy(true);
     const res = await verifyLoginCode(e164, code.trim()).catch(() => ({ ok: false as const, error: "Something went wrong. Please try again." }));
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    if (res.needsName) setStep("name");
+    else onVerified();
+  }
+
+  async function submitName(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (name.trim().length < 2) return setError("Please enter your name.");
+    setBusy(true);
+    const res = await saveOwnerName(name).catch(() => ({ ok: false as const, error: "Something went wrong. Please try again." }));
     setBusy(false);
     if (!res.ok) return setError(res.error);
     onVerified();
@@ -89,6 +103,33 @@ export function PhoneOtp({ onVerified, intro }: { onVerified: () => void; intro?
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button className="btn-primary w-full" disabled={busy}>
           {busy ? "Sending…" : "Send code on WhatsApp"}
+        </button>
+      </form>
+    );
+  }
+
+  if (step === "name") {
+    return (
+      <form onSubmit={submitName} className="space-y-4">
+        <p className="text-sm text-zinc-600">Your number is verified. What should we call you? You can change it later in My account.</p>
+        <div>
+          <label className="label" htmlFor="otp-name">
+            Your name
+          </label>
+          <input
+            id="otp-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            maxLength={80}
+            className="input"
+            required
+            autoFocus
+          />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button className="btn-primary w-full" disabled={busy}>
+          {busy ? "Saving…" : "Continue"}
         </button>
       </form>
     );

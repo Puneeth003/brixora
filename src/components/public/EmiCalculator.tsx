@@ -6,8 +6,20 @@ import { formatNumber, formatPrice } from "@/lib/format";
 
 type Field = keyof typeof EMI_LIMITS;
 
-/** Home-loan EMI estimate for a sale listing. Everything is worked out in the browser. */
-export function EmiCalculator({ price }: { price: number }) {
+/**
+ * Home-loan EMI estimate. Everything is worked out in the browser. On a sale listing the
+ * price is fixed; with `onPriceChange` (the site-wide side widget) the visitor types it.
+ * `stacked` puts the result under the sliders, for narrow containers.
+ */
+export function EmiCalculator({
+  price,
+  onPriceChange,
+  stacked = false,
+}: {
+  price: number;
+  onPriceChange?: (price: number) => void;
+  stacked?: boolean;
+}) {
   const id = useId();
   const [values, setValues] = useState<Record<Field, number>>({ ...EMI_DEFAULTS });
   const result = calculateEmi({ price, ...values });
@@ -49,14 +61,34 @@ export function EmiCalculator({ price }: { price: number }) {
   };
 
   return (
-    <section className="card p-5" aria-labelledby={`${id}-title`}>
+    <section className={stacked ? "" : "card p-5"} aria-labelledby={`${id}-title`}>
       <h2 id={`${id}-title`} className="font-semibold">
         EMI calculator
       </h2>
-      <p className="mb-5 text-sm text-zinc-500">Estimate the monthly home-loan payment for this property.</p>
+      <p className="mb-5 text-sm text-zinc-500">
+        Estimate the monthly home-loan payment {onPriceChange ? "for a property" : "for this property"}.
+      </p>
 
-      <div className="grid gap-6 md:grid-cols-[1fr_260px]">
+      <div className={stacked ? "grid gap-6" : "grid gap-6 md:grid-cols-[1fr_260px]"}>
         <div className="space-y-5">
+          {onPriceChange && (
+            <div>
+              <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                <label htmlFor={`${id}-price`} className="text-sm font-medium text-zinc-700">
+                  Property price (₹)
+                </label>
+                <span className="text-sm font-semibold text-zinc-900 tabular-nums">{price > 0 ? formatPrice(price) : "—"}</span>
+              </div>
+              <input
+                id={`${id}-price`}
+                className="input"
+                inputMode="numeric"
+                value={price > 0 ? String(price) : ""}
+                onChange={(e) => onPriceChange(Math.min(10_000_000_000, Number(e.target.value.replace(/\D/g, "")) || 0))}
+                placeholder="e.g. 7500000"
+              />
+            </div>
+          )}
           {slider("downPaymentPct", "Down payment", `${values.downPaymentPct}% · ${formatPrice(result.downPayment)}`)}
           {slider("annualRatePct", "Interest rate (per year)", `${values.annualRatePct.toFixed(2)}%`)}
           {slider("years", "Loan tenure", `${values.years} ${values.years === 1 ? "year" : "years"}`)}

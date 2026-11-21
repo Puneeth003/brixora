@@ -4,9 +4,11 @@ import { getOwner, recordAttempt, startSession, tooManyAttempts } from "@/lib/au
 import { db, dbConfigured, transaction, uuid } from "@/lib/db";
 import { hmac, randomDigits, safeEqual } from "@/lib/crypto";
 import { normalizeIndianPhone } from "@/lib/format";
+import { firstError, ownerNameSchema } from "@/lib/validation";
 import { recentOtpCount, sendOtp, sendWelcomeIfNew, whatsappConnection } from "@/lib/whatsapp";
 
-// Owner sign-in: phone → 6-digit code on WhatsApp → session cookie.
+// Owner sign-in: phone → 6-digit code on WhatsApp → session cookie → (first time) name.
+// The name is asked once, here; owners change it later in My account.
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -16,8 +18,19 @@ const OTP_PER_HOUR = 3;
 
 const codeHash = (phone: string, code: string) => hmac("otp", `${phone}:${code}`);
 
-export async function hasOwnerSession() {
-  return Boolean(await getOwner());
+/** Signed in, and whether we still need their name. */
+export async function ownerSessionState() {
+  const owner = await getOwner();
+  return { signedIn: Boolean(owner), needsName: Boolean(owner && !owner.profile.name?.trim()) };
+}
+
+export async function saveOwnerName(rawName: string): Promise<Result> {
+  const owner = await getOwner();
+  if (!owner) return { ok: false, error: "Your session expired. Please verify again." };
+  const parsed = ownerNameSchema.safeParse(rawName);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  await db.update("users", { name: parsed.data }, "id = ?", [owner.id]);
+  return { ok: true };
 }
 
 export async function sendLoginCode(rawPhone: string): Promise<Result> {
@@ -45,7 +58,7 @@ export async function sendLoginCode(rawPhone: string): Promise<Result> {
   return { ok: true };
 }
 
-export async function verifyLoginCode(rawPhone: string, rawCode: string): Promise<Result> {
+export async function verifyLoginCode(rawPhone: string, rawCode: string): Promise<{ ok: true; needsName: boolean } | { ok: false; error: string }> {
   if (!dbConfigured) return { ok: false, error: "Sign-in isn't configured yet." };
   const phone = normalizeIndianPhone(rawPhone);
   const code = rawCode.replace(/\D/g, "");
@@ -92,5 +105,6 @@ export async function verifyLoginCode(rawPhone: string, rawCode: string): Promis
   await db.run("UPDATE enquiries SET user_id = ? WHERE phone = ? AND user_id IS NULL", [userId, phone]);
   await db.update("users", { last_login_at: new Date() }, "id = ?", [userId]);
   await startSession("owner", userId);
-  return { ok: true };
+  const user = await db.one<{ name: string | null }>("SELECT name FROM users WHERE id = ?", [userId]);
+  return { ok: true, needsName: !user?.name?.trim() };
 }

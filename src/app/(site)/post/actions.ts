@@ -2,7 +2,7 @@
 
 import { getOwner } from "@/lib/auth";
 import { db, nextReferenceNo, uuid } from "@/lib/db";
-import { firstError, firstErrorField, ownerNameSchema, ownerPropertySchema, pinSchema } from "@/lib/validation";
+import { firstError, firstErrorField, ownerPropertySchema, pinSchema } from "@/lib/validation";
 import { ImageError, processAndStore } from "@/lib/images";
 import { DocumentError, storeDocument } from "@/lib/documents";
 import { notify } from "@/lib/whatsapp";
@@ -15,13 +15,15 @@ type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string; field
 /** Unfinished submissions one number may start per day (each takes a reference number). */
 const MAX_DRAFTS_PER_DAY = 5;
 
-/** Step 1 of submit: create the draft (status forced to "draft", owner forced to self). */
-export async function createDraft(input: unknown, name: unknown): Promise<Result<{ id: string; ref: string }>> {
+/**
+ * Step 1 of submit: create the draft (status forced to "draft", owner forced to self).
+ * The owner's name comes from their account (asked at WhatsApp sign-in), not the form.
+ */
+export async function createDraft(input: unknown): Promise<Result<{ id: string; ref: string }>> {
   const owner = await getOwner();
   if (!owner) return { ok: false, error: "Please verify your phone number first." };
 
-  const parsedName = ownerNameSchema.safeParse(name);
-  if (!parsedName.success) return { ok: false, error: firstError(parsedName.error), field: "name" };
+  if (!owner.profile.name?.trim()) return { ok: false, error: "Please sign in again and tell us your name." };
   const parsed = ownerPropertySchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error), field: firstErrorField(parsed.error) };
   const pin = pinSchema.safeParse(input);
@@ -36,7 +38,6 @@ export async function createDraft(input: unknown, name: unknown): Promise<Result
   }
 
   try {
-    await db.update("users", { name: parsedName.data }, "id = ?", [owner.id]);
     const id = uuid();
     const ref = await nextReferenceNo();
     await db.insert("properties", { ...parsed.data, ...pin.data, id, reference_no: ref, status: "draft", owner_id: owner.id });

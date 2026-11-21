@@ -11,7 +11,8 @@ import { createDraft, finalizeSubmission, uploadDraftDocument, uploadDraftPhoto 
 import { clearDraft, loadDraft, loadPhotos, saveDraft, savePhotos } from "@/lib/post-draft";
 import type { DocumentType } from "@/lib/types";
 
-const STEPS = ["Type", "Location", "Details", "Photos", "Documents", "Verify", "Your name"] as const;
+// The owner's name is asked once, at WhatsApp sign-in (PhoneOtp), not here.
+const STEPS = ["Type", "Location", "Details", "Photos", "Documents", "Verify", "Confirm"] as const;
 const S = { type: 0, location: 1, details: 2, photos: 3, documents: 4, verify: 5, name: 6 } as const;
 
 /** Which step holds each server-validated field, to jump back when the server rejects it. */
@@ -96,7 +97,6 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [docType, setDocType] = useState<DocumentType>("sale_deed");
-  const [name, setName] = useState("");
   const [consent, setConsent] = useState({ owner: false, brokerage: false });
   const [docsLater, setDocsLater] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +130,6 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
         const saved = await loadPhotos();
         if (cancelled) return;
         setForm((f) => ({ ...f, ...d.form }));
-        setName(d.name || "");
         setPhotos(saved.map((x) => ({ id: x.id, file: x.file, url: URL.createObjectURL(x.file) })));
         // Never land on Verify or Your name: the OTP has to be done again anyway.
         setStep(Math.min(Math.max(d.step, 0), S.photos));
@@ -145,8 +144,8 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
 
   useEffect(() => {
     if (!loadedRef.current || doneRef) return;
-    saveDraft(form, Math.min(step, S.photos), name);
-  }, [form, step, name, doneRef]);
+    saveDraft(form, Math.min(step, S.photos), "");
+  }, [form, step, doneRef]);
 
   useEffect(() => {
     if (!loadedRef.current || doneRef) return;
@@ -158,7 +157,6 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
     photosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
     setPhotos([]);
     setDocs([]);
-    setName("");
     setConsent({ owner: false, brokerage: false });
     setDocsLater(false);
     setError(null);
@@ -222,12 +220,10 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
       return fail("documents", "Upload an ownership document, or choose \u201cI\u2019ll upload later\u201d.");
     if (step === S.photos && photos.length < PHOTO_LIMITS.min) return fail(null, `Add at least ${PHOTO_LIMITS.min} photos.`);
     if (step === S.name) {
-      if (name.trim().length < 2) return fail("name", "Enter your name.");
-      if (name.trim().length > 80) return fail("name", "Name is too long.");
       if (!consent.owner || !consent.brokerage) return fail("consent", "Please tick both boxes to submit.");
     }
     return null;
-  }, [step, form, photos.length, docs.length, docsLater, name, residential, consent]);
+  }, [step, form, photos.length, docs.length, docsLater, residential, consent]);
 
   // Shows the step's first problem; a field problem is shown under that field, which is
   // scrolled into view and focused (it can be far above the Continue button).
@@ -252,7 +248,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
   const back = () => {
     setError(null);
     setErrorField(null);
-    // From "Your name", skip Verify: the number is already verified and the OTP step
+    // From "Confirm", skip Verify: the number is already verified and the OTP step
     // would send them straight forward again.
     setStep((s) => (s === S.name ? S.documents : Math.max(0, s - 1)));
   };
@@ -315,7 +311,6 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
             property_age: form.property_type === "plot" ? "" : form.property_age,
             amenities: form.property_type === "plot" ? [] : form.amenities,
           },
-          name,
         );
         if (!res.ok) {
           if (res.field && res.field in FIELD_STEP) setStep(FIELD_STEP[res.field]);
@@ -795,9 +790,6 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
 
         {step === S.name && (
           <>
-            <Field name="name" error={errorFor("name")} label="Your name" required>
-              <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={80} />
-            </Field>
             <OwnerOnlyNotice brandName={brandName} />
             <div className="space-y-2" data-field="consent">
               <label className="flex items-start gap-2.5 text-sm">
