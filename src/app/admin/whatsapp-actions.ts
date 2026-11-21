@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { site } from "@/lib/site";
 import { normalizeIndianPhone } from "@/lib/format";
 import { graphVersion, sendTemplateTest, templateSettings, TEMPLATES, whatsappConnection, type TemplateName } from "@/lib/whatsapp";
 import type { ActionState } from "@/lib/types";
@@ -278,7 +279,7 @@ export async function checkWhatsApp(): Promise<HealthCheck[]> {
         ? `${[!secret && "WHATSAPP_APP_SECRET", !verify && "WHATSAPP_VERIFY_TOKEN"].filter(Boolean).join(" and ")} not set. Without them Meta's events are refused.`
         : lastAt
           ? `Last event from Meta ${lastAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.`
-          : "No event received yet. In Meta → WhatsApp → Configuration set the callback URL to https://<your domain>/api/whatsapp/webhook, the verify token, and subscribe to messages; then send a test.",
+          : `No event received yet. In Meta → app → WhatsApp → Configuration set the callback URL to ${site.url}/api/whatsapp/webhook with the same verify token as WHATSAPP_VERIFY_TOKEN, subscribe to "messages", then press Test next to it (or send a template test).`,
   });
   add({
     key: "app",
