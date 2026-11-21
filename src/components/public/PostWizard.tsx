@@ -98,6 +98,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
   const [docType, setDocType] = useState<DocumentType>("sale_deed");
   const [name, setName] = useState("");
   const [consent, setConsent] = useState({ owner: false, brokerage: false });
+  const [docsLater, setDocsLater] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Field the last "Continue" stopped on; its message shows under that field until it is fixed.
   const [errorField, setErrorField] = useState<string | null>(null);
@@ -159,6 +160,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
     setDocs([]);
     setName("");
     setConsent({ owner: false, brokerage: false });
+    setDocsLater(false);
     setError(null);
     setErrorField(null);
     setRestored(false);
@@ -216,6 +218,8 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
       if (area > 10_000_000) return fail("area_sqft", "Area looks too large. Check the number.");
       if (form.description.trim().length < 30) return fail("description", "Describe the property in at least 30 characters.");
     }
+    if (step === S.documents && docs.length === 0 && !docsLater)
+      return fail("documents", "Upload an ownership document, or choose \u201cI\u2019ll upload later\u201d.");
     if (step === S.photos && photos.length < PHOTO_LIMITS.min) return fail(null, `Add at least ${PHOTO_LIMITS.min} photos.`);
     if (step === S.name) {
       if (name.trim().length < 2) return fail("name", "Enter your name.");
@@ -223,7 +227,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
       if (!consent.owner || !consent.brokerage) return fail("consent", "Please tick both boxes to submit.");
     }
     return null;
-  }, [step, form, photos.length, name, residential, consent]);
+  }, [step, form, photos.length, docs.length, docsLater, name, residential, consent]);
 
   // Shows the step's first problem; a field problem is shown under that field, which is
   // scrolled into view and focused (it can be far above the Continue button).
@@ -688,16 +692,43 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
 
         {step === S.documents && (
           <>
+            <OwnerOnlyNotice brandName={brandName} />
             <div>
               <p className="font-medium">
-                Ownership documents <span className="font-normal text-zinc-500">(optional, {docs.length}/{DOCUMENT_LIMITS.max})</span>
+                Ownership documents <span className="font-normal text-zinc-500">({docs.length}/{DOCUMENT_LIMITS.max})</span>
               </p>
               <p className="text-sm text-zinc-500">
-                Sale deed, khata, RTC, tax receipt and so on. They speed up the verification. Only our team and the auditor see
-                them; they are never shown on the website. PDF or a clear photo, up to {DOCUMENT_LIMITS.maxBytes / 1024 / 1024} MB each.
-                You can also add them later from My listings.
+                Used only to verify that you are the owner. Sale deed, khata, RTC, tax receipt and so on. Only our team and the
+                auditor see them; they are never shown on the website. PDF or a clear photo, up to{" "}
+                {DOCUMENT_LIMITS.maxBytes / 1024 / 1024} MB each.
               </p>
             </div>
+            <div className="grid gap-2 sm:grid-cols-2" data-field="documents">
+              {[
+                { later: false, title: "Upload now", text: "Verification is faster." },
+                { later: true, title: "I\u2019ll upload later", text: "Add them from My Listings before the listing goes live." },
+              ].map((o) => (
+                <button
+                  key={o.title}
+                  type="button"
+                  onClick={() => {
+                    setDocsLater(o.later);
+                    setError(null);
+                    setErrorField(null);
+                  }}
+                  aria-pressed={docsLater === o.later}
+                  className={`rounded-xl border px-4 py-3 text-left text-sm transition-colors ${
+                    docsLater === o.later ? "border-brand-600 bg-brand-50 ring-1 ring-brand-600" : "border-zinc-200 hover:border-zinc-300"
+                  }`}
+                >
+                  <span className="block font-semibold text-ink">{o.title}</span>
+                  <span className="block text-zinc-500">{o.text}</span>
+                </button>
+              ))}
+              {errorFor("documents") && <p className="text-sm text-red-600 sm:col-span-2">{errorFor("documents")}</p>}
+            </div>
+            {!docsLater && (
+              <>
             {docs.length > 0 && (
               <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200">
                 {docs.map((d, i) => {
@@ -750,7 +781,8 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
                 </label>
               </div>
             )}
-            {docs.length === 0 && <p className="text-sm text-zinc-500">No documents? Tap Continue; our auditor can check them at the visit.</p>}
+              </>
+            )}
           </>
         )}
 
@@ -766,6 +798,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
             <Field name="name" error={errorFor("name")} label="Your name" required>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={80} />
             </Field>
+            <OwnerOnlyNotice brandName={brandName} />
             <div className="space-y-2" data-field="consent">
               <label className="flex items-start gap-2.5 text-sm">
                 <input
@@ -774,7 +807,9 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
                   onChange={(e) => setConsent((c) => ({ ...c, owner: e.target.checked }))}
                   className="mt-0.5 size-4 shrink-0 accent-brand-600"
                 />
-                <span>I am the owner of this property, or I have the owner&apos;s permission to list it.</span>
+                <span>
+                  <strong>I am the owner of this property.</strong> I am not a broker or agent listing it for someone else.
+                </span>
               </label>
               <label className="flex items-start gap-2.5 text-sm">
                 <input
@@ -784,8 +819,9 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
                   className="mt-0.5 size-4 shrink-0 accent-brand-600"
                 />
                 <span>
-                  I agree that {brandName} lists this property for me and handles every buyer or tenant enquiry. My number and address
-                  are not shared with them.
+                  <strong>I agree to pay {brandName}&apos;s real estate fees</strong> when this property is sold or rented through{" "}
+                  {brandName}. {brandName} lists it for me and handles every buyer or tenant enquiry; my number and address are not
+                  shared with them.
                 </span>
               </label>
               {errorFor("consent") && <p className="text-sm text-red-600">{errorFor("consent")}</p>}
@@ -813,7 +849,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
           )}
           {step < S.verify && (
             <button type="button" onClick={next} className="btn-primary">
-              {step === S.documents && docs.length === 0 ? "Skip" : "Continue"}
+              Continue
             </button>
           )}
           {step === S.name && (
@@ -828,6 +864,18 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
 }
 
 type StepError = { field: string | null; message: string };
+
+function OwnerOnlyNotice({ brandName }: { brandName: string }) {
+  return (
+    <div className="rounded-xl border border-gold-400 bg-gold-300/15 px-4 py-3 text-sm text-ink">
+      <p className="font-semibold text-gold-600">Only property owners can list</p>
+      <p className="mt-0.5 text-zinc-700">
+        Brokers and agents are not allowed to list on {brandName}. Owners who list agree to {brandName}&apos;s real estate fees
+        when the property is sold or rented through us.
+      </p>
+    </div>
+  );
+}
 
 function Field({
   name,

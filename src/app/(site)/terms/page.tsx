@@ -41,7 +41,14 @@ export default async function TermsPage() {
 
       <h2>Posting a property</h2>
       <ul className="list-disc space-y-1 pl-5">
-        <li>You must own the property or have the owner&apos;s permission to list it.</li>
+        <li>
+          Only the owner of a property may list it. Brokers and agents may not list properties for others. We may ask for
+          ownership documents to verify this before a listing goes live.
+        </li>
+        <li>
+          By listing, the owner agrees to pay {site.name}&apos;s real estate fees when the property is sold or rented through
+          us.
+        </li>
         <li>Details, prices and photos must be true and must not mislead. Photos must be your own or used with permission.</li>
         <li>
           We review every listing and may verify it on site before publishing. We may edit, decline, hide or remove a

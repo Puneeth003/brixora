@@ -96,7 +96,7 @@ export const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
 export const DOCUMENT_LIMITS = { max: 10, maxBytes: 7 * 1024 * 1024 };
 
 /** Wording the owner agrees to on submission; bump the version when it changes. */
-export const OWNER_CONSENT_VERSION = "v1";
+export const OWNER_CONSENT_VERSION = "v2";
 
 export function documentTypeLabel(value: string) {
   return DOCUMENT_TYPES.find((t) => t.value === value)?.label ?? value;
