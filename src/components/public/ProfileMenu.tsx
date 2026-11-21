@@ -9,8 +9,8 @@ import { memberSignOut } from "@/app/(site)/account/actions";
 export type HeaderUser = { name: string | null; phone: string; unread: number };
 
 export const ACCOUNT_LINKS = [
-  // My listings takes the top spot ("My account" was dropped from the menu; /account still works).
-  { href: "/manage", label: "My listings" },
+  // The account page, labelled "My listings" at the owner's request.
+  { href: "/account", label: "My listings" },
   { href: "/account/enquiries", label: "My enquiries" },
   { href: "/shortlist", label: "Shortlist" },
 ];
