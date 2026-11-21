@@ -202,7 +202,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
       if (address < 5) return fail("private_address", "Enter the address (kept private).");
       if (address > 300) return fail("private_address", "Address is too long (300 characters at most).");
       if (form.private_landmark.trim().length > 200) return fail("private_landmark", "Landmark is too long (200 characters at most).");
-      if (form.latitude === null || form.longitude === null) return fail("pin", "Drop a pin on the map at the property.");
+      if (form.latitude === null || form.longitude === null) return fail("pin", "Drag the map until the pin sits on your property.");
     }
     if (step === S.details) {
       const title = form.title.trim().length;

@@ -59,7 +59,7 @@ const coord = (limit: number) =>
   z.preprocess(
     // "" and null would coerce to 0, a real place in the ocean.
     (v) => (v === "" || v === null || v === undefined ? undefined : Number(v)),
-    z.number({ message: "Drop a pin on the map at the property." }).min(-limit).max(limit),
+    z.number({ message: "Drag the map until the pin sits on your property." }).min(-limit).max(limit),
   );
 
 export const pinSchema = z.object({ latitude: coord(90), longitude: coord(180) });
