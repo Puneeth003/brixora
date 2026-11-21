@@ -16,7 +16,7 @@ export const ACCOUNT_LINKS = [
 ];
 
 /** The profile menu when signed out. */
-const GUEST_LINKS = [
+export const GUEST_LINKS = [
   { href: "/manage", label: "My listings" },
   { href: "/shortlist", label: "Shortlist" },
 ];

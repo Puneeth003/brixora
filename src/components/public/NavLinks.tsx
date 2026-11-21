@@ -5,14 +5,13 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { TagIcon } from "@/components/icons";
 import { memberSignOut } from "@/app/(site)/account/actions";
-import { ACCOUNT_LINKS, isAccountLinkActive, useUnread, type HeaderUser } from "./ProfileMenu";
+import { ACCOUNT_LINKS, GUEST_LINKS, isAccountLinkActive, useUnread, type HeaderUser } from "./ProfileMenu";
 
 export const NAV_LINKS: { href: string; match: string; label: string; highlight?: boolean }[] = [
   { href: "/", match: "/", label: "Home" },
   { href: "/properties?listing=sale", match: "/properties", label: "Buy" },
   { href: "/post", match: "/post", label: "Sell", highlight: true },
-  // My Listings lives in the account menu (ACCOUNT_LINKS).
-  { href: "/shortlist", match: "/shortlist", label: "Shortlist" },
+  // My listings and Shortlist live in the profile menu (ACCOUNT_LINKS / GUEST_LINKS).
 ];
 
 /** Home only matches the exact root; every other link matches its section prefix. */
@@ -124,13 +123,14 @@ export function MobileMenu({ contactHref, user }: { contactHref: string; user: H
                 {l.label}
               </Link>
             ))}
-            {user && (
+            {(
               <div className="mt-2 flex flex-col border-t border-zinc-100 pt-3">
-                <p className="truncate px-3 pb-1 text-xs text-zinc-500">
-                  Signed in as <span className="font-semibold text-zinc-800">{user.name ?? user.phone}</span>
-                </p>
-                {/* Shortlist is already in the links above. */}
-                {ACCOUNT_LINKS.filter((m) => m.href !== "/shortlist").map((m) => (
+                {user && (
+                  <p className="truncate px-3 pb-1 text-xs text-zinc-500">
+                    Signed in as <span className="font-semibold text-zinc-800">{user.name ?? user.phone}</span>
+                  </p>
+                )}
+                {(user ? ACCOUNT_LINKS : GUEST_LINKS).map((m) => (
                   <Link
                     key={m.href}
                     href={m.href}
