@@ -20,13 +20,15 @@ export type NotifyTemplate =
   | "enquiry_forward" // [ref, name, phone, message, link]
   | "enquiry_reply" // [name, ref, link]
   | "site_visit_scheduled" // [ref, date & time]
-  | "staff_invite"; // [name, set-password link]
+  | "staff_invite" // [name, set-password link]
+  | "welcome"; // [] first message to a new customer, sent just before their first login code
 
 export type TemplateName = NotifyTemplate | "otp_login";
 
 /** Every template the website sends, with its variables and the samples Meta asks for. */
-export const TEMPLATES: { key: TemplateName; category: "Authentication" | "Utility"; purpose: string; params: string[]; sample: string[] }[] = [
+export const TEMPLATES: { key: TemplateName; category: "Authentication" | "Utility" | "Marketing"; purpose: string; params: string[]; sample: string[] }[] = [
   { key: "otp_login", category: "Authentication", purpose: "Login code", params: ["code"], sample: ["482913"] },
+  { key: "welcome", category: "Marketing", purpose: "Welcome to a new customer (before their first login code)", params: [], sample: [] },
   { key: "submission_received", category: "Utility", purpose: "Owner posted a property", params: ["name", "ref"], sample: ["Ravi", "BRX-2026-0042"] },
   { key: "listing_approved", category: "Utility", purpose: "Listing is live", params: ["ref", "link"], sample: ["BRX-2026-0042", "https://brixora.in/properties/BRX-2026-0042"] },
   { key: "listing_rejected", category: "Utility", purpose: "Listing declined", params: ["ref", "reason"], sample: ["BRX-2026-0042", "Photos are not clear"] },
@@ -313,6 +315,26 @@ export async function sendOtp(phone: string, code: string) {
   const result = await deliver(id);
   await db.update("messages", { payload: { params: ["******"] } }, "id = ?", [id]);
   return result.ok;
+}
+
+/**
+ * A first-time customer's welcome message, sent just before their first login code.
+ * Only once per number, only when a "welcome" template has been added in Settings →
+ * WhatsApp templates, and never to an existing account. Never throws or blocks the code.
+ */
+export async function sendWelcomeIfNew(phone: string): Promise<void> {
+  try {
+    const p = normalizePhone(phone);
+    if (!(await templateSettings()).welcome.added) return;
+    const known = await db.count(
+      `SELECT (SELECT COUNT(*) FROM users WHERE phone = ?) + (SELECT COUNT(*) FROM messages WHERE recipient_phone = ? AND template_name = 'welcome')`,
+      [p, p],
+    );
+    if (known) return;
+    await notify(p, "welcome", []);
+  } catch (e) {
+    console.error("[whatsapp] welcome failed", e);
+  }
 }
 
 /** OTP sends to this number in the last hour (for rate limiting). */

@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { logActivity, SETTINGS_ENTITY_ID } from "@/lib/activity";
 import { requireAdmin } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { graphVersion, whatsappConnection } from "@/lib/whatsapp";
+import { graphVersion, TEMPLATES, whatsappConnection } from "@/lib/whatsapp";
 import { templateProblems, toMetaComponents, type TemplateButton, type TemplateDraft } from "@/lib/wa-template-types";
 import type { ActionState } from "@/lib/types";
 
@@ -72,8 +73,13 @@ function cleanDraft(raw: unknown): TemplateDraft {
   };
 }
 
-/** Submits a new template to Meta for review. */
-export async function createTemplate(raw: unknown): Promise<ActionState & { status?: string }> {
+/**
+ * Submits a new template to Meta for review. With `forKey` (a website message, e.g.
+ * "welcome"), the template is also linked to that message in Settings → WhatsApp
+ * templates, except the login code, which is linked by hand once approved so sign-in
+ * never depends on a template still in review.
+ */
+export async function createTemplate(raw: unknown, forKey?: string): Promise<ActionState & { status?: string; linked?: boolean }> {
   const admin = await requireAdmin();
   const draft = cleanDraft(raw);
   const problems = templateProblems(draft);
@@ -99,14 +105,26 @@ export async function createTemplate(raw: unknown): Promise<ActionState & { stat
     });
     revalidatePath("/admin/templates");
     const status = String(json.status ?? "PENDING");
+    const website = TEMPLATES.find((t) => t.key === forKey);
+    let linked = false;
+    if (website && website.key !== "otp_login") {
+      await db.run("INSERT INTO app_config (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [
+        `tpl:${website.key}`,
+        JSON.stringify({ name: draft.name, lang: draft.language }),
+      ]);
+      linked = true;
+      revalidatePath("/admin/settings");
+    }
+    const link = linked ? ` It's linked to "${website!.purpose}" and is used as soon as Meta approves it.` : website?.key === "otp_login" ? " Once approved, link it to the login code in Settings → WhatsApp templates." : "";
     const changed = json.category && json.category !== draft.category ? ` Meta filed it as ${String(json.category).toLowerCase()}.` : "";
     return {
       ok: true,
       status,
+      linked,
       message:
         status === "APPROVED"
-          ? `${draft.name} is approved and ready to use.${changed}`
-          : `${draft.name} was sent to Meta for review. It usually takes a few minutes, at most 24 hours.${changed}`,
+          ? `${draft.name} is approved and ready to use.${changed}${link}`
+          : `${draft.name} was sent to Meta for review. It usually takes a few minutes, at most 24 hours.${changed}${link}`,
     };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Couldn't reach Meta." };

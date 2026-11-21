@@ -38,6 +38,9 @@ export type BuilderPrefill = {
   buttons: string[];
 };
 
+/** "?for=<website message key>": the suggested template for one website message. */
+export type BuilderSuggestion = { key: string; purpose: string; draft: TemplateDraft };
+
 type State = {
   name: string;
   language: string;
@@ -134,6 +137,25 @@ function fromPrefill(p: BuilderPrefill): State {
     body: p.body,
     footer: p.footer,
     buttons: p.buttons.slice(0, LIMITS.buttons).map((text) => ({ type: "QUICK_REPLY", text })),
+  };
+}
+
+function fromDraft(d: TemplateDraft): State {
+  return {
+    ...EMPTY,
+    name: d.name,
+    language: d.language,
+    category: d.category,
+    headerFormat: d.header.format === "TEXT" ? "TEXT" : "NONE",
+    headerText: d.header.format === "TEXT" ? d.header.text : "",
+    headerExample: d.header.format === "TEXT" ? d.header.example : "",
+    body: d.body,
+    bodyExamples: [...d.bodyExamples],
+    footer: d.footer,
+    buttons: d.buttons.map((b) => ({ ...b })),
+    auth: d.auth
+      ? { securityRecommendation: d.auth.securityRecommendation, expiry: d.auth.expiryMinutes == null ? "" : String(d.auth.expiryMinutes), buttonText: d.auth.buttonText }
+      : EMPTY.auth,
   };
 }
 
@@ -601,25 +623,27 @@ function Preview({ s, media, businessName }: { s: State; media: Media | null; bu
 export function TemplateBuilder({
   disabled,
   prefill,
+  suggestion = null,
   existing,
   businessName,
 }: {
   disabled: boolean;
   prefill: BuilderPrefill | null;
+  suggestion?: BuilderSuggestion | null;
   existing: { name: string; language: string }[];
   businessName: string;
 }) {
   const [confirm, confirmDialog] = useConfirm();
-  const [s, setS] = useState<State>(() => (prefill ? fromPrefill(prefill) : EMPTY));
+  const [s, setS] = useState<State>(() => (suggestion ? fromDraft(suggestion.draft) : prefill ? fromPrefill(prefill) : EMPTY));
   const update = (patch: Partial<State>) => setS((prev) => ({ ...prev, ...patch }));
   const [media, setMedia] = useState<Media | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [restoredDraft, setRestoredDraft] = useState(false);
-  const [copied, setCopied] = useState(Boolean(prefill));
+  const [copied, setCopied] = useState(Boolean(prefill || suggestion));
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ message: string; status: string; name: string } | null>(null);
+  const [done, setDone] = useState<{ message: string; status: string; name: string; linked: boolean } | null>(null);
   const [submitting, startSubmit] = useTransition();
   const restored = useRef(false);
   const finished = useRef(false);
@@ -628,11 +652,12 @@ export function TemplateBuilder({
   const headerRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Restore the draft once, after hydration. A "Copy as new" prefill wins over it.
+  // Restore the draft once, after hydration. A "Copy as new" or "?for" prefill wins over it.
+  const prefilled = Boolean(prefill || suggestion);
   useEffect(() => {
     if (restored.current) return;
     restored.current = true;
-    if (prefill) return;
+    if (prefilled) return;
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       const saved = raw ? fromSaved(JSON.parse(raw)) : null;
@@ -644,7 +669,7 @@ export function TemplateBuilder({
     } catch {
       // Storage blocked or a corrupt draft: start fresh.
     }
-  }, [prefill]);
+  }, [prefilled]);
 
   // Save the draft (debounced). The media handle isn't kept: it needs a fresh upload.
   useEffect(() => {
@@ -903,11 +928,12 @@ export function TemplateBuilder({
     setSubmitError(null);
     startSubmit(async () => {
       try {
-        const res = await createTemplate(draft);
+        // Link it to the website message only while it's still the suggested one (not after "Start over").
+        const res = await createTemplate(draft, suggestion && copied ? suggestion.key : undefined);
         if (res?.ok) {
           finished.current = true;
           clearDraft();
-          setDone({ message: res.message ?? "Sent to Meta for review.", status: res.status ?? "PENDING", name: draft.name });
+          setDone({ message: res.message ?? "Sent to Meta for review.", status: res.status ?? "PENDING", name: draft.name, linked: Boolean(res.linked) });
           topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         } else setSubmitError(res?.error ?? "Meta didn't accept the template.");
       } catch {
@@ -933,7 +959,13 @@ export function TemplateBuilder({
           </button>
         </div>
       )}
-      {prefill && copied && !done && (
+      {suggestion && copied && !done && (
+        <div className="mb-6 rounded-2xl bg-[var(--s-brand-soft)] px-4 py-3 text-sm text-[var(--s-text-2)]">
+          Creating the template for: <strong className="text-[var(--s-text)]">{suggestion.purpose}</strong>.{" "}
+          {suggestion.key === "otp_login" ? "Link it in Settings once Meta approves it." : "It will be linked automatically once submitted."}
+        </div>
+      )}
+      {!suggestion && prefill && copied && !done && (
         <div className="mb-6 rounded-2xl bg-[var(--s-seg)] px-4 py-3 text-sm text-[var(--s-text-2)]">
           Copied from <strong className="font-mono text-[var(--s-text)]">{prefill.source}</strong>.
           {prefill.buttons.length > 0 && " Buttons came over as quick replies: change the type and add links or numbers where needed."}
@@ -961,6 +993,11 @@ export function TemplateBuilder({
               <Link href="/admin/templates" className="btn-primary px-5 py-2 text-sm">
                 Back to templates
               </Link>
+              {done.linked && (
+                <Link href="/admin/settings?section=templates" className="btn-secondary px-5 py-2 text-sm">
+                  WhatsApp templates settings
+                </Link>
+              )}
               <button type="button" onClick={createAnother} className="btn-secondary px-5 py-2 text-sm">
                 Create another
               </button>

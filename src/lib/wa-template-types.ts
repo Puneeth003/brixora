@@ -152,3 +152,136 @@ export function toMetaComponents(d: TemplateDraft): unknown[] {
   }
   return out;
 }
+
+/**
+ * A ready, Meta-approvable template for each website message (TEMPLATES in lib/whatsapp),
+ * keyed by its key. The body's {{n}} follow that message's `params` in order, with the
+ * `sample` values as examples. Used by the builder's "?for=<key>" (Settings → WhatsApp
+ * templates → Create in Meta). Utility links stay in the body: button links can't be filled.
+ */
+export const SUGGESTED_TEMPLATES: Record<string, Omit<TemplateDraft, "language">> = {
+  otp_login: {
+    name: "otp_login",
+    category: "AUTHENTICATION",
+    header: { format: "NONE" },
+    body: "",
+    bodyExamples: [],
+    footer: "",
+    buttons: [],
+    auth: { securityRecommendation: true, expiryMinutes: 5, buttonText: "Copy code" },
+  },
+  welcome: {
+    name: "brixora_welcome",
+    category: "MARKETING",
+    header: { format: "TEXT", text: "Welcome to Brixora", example: "" },
+    body:
+      "Hi there, welcome to Brixora! 🏡 We're glad to have you with us.\n\n" +
+      "With Brixora you can:\n" +
+      "• Browse verified property listings\n" +
+      "• Post your own property for sale or rent\n" +
+      "• Get replies to your enquiries right here on WhatsApp\n\n" +
+      "Your login code follows in the next message.",
+    bodyExamples: [],
+    footer: "Reply STOP to opt out",
+    buttons: [{ type: "URL", text: "Visit Brixora", url: "https://brixora.in" }],
+  },
+  submission_received: {
+    name: "submission_received",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "Hi {{1}}, thank you for posting your property with Brixora. Your reference number is {{2}}.\n\nOur team will review the listing and let you know here as soon as it's live.",
+    bodyExamples: ["Ravi", "BRX-2026-0042"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  listing_approved: {
+    name: "listing_approved",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "Good news! Your property {{1}} has been approved and is now live on Brixora.\n\nView your listing here: {{2}}\n\nWe'll message you here as soon as buyers start enquiring.",
+    bodyExamples: ["BRX-2026-0042", "https://brixora.in/properties/BRX-2026-0042"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  listing_rejected: {
+    name: "listing_rejected",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "We reviewed your property {{1}} and couldn't approve it yet.\n\nReason: {{2}}\n\nPlease update the listing and submit it again, or reply to this message if you need any help.",
+    bodyExamples: ["BRX-2026-0042", "Photos are not clear"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  change_received: {
+    name: "change_received",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "We've received your change request for property {{1}}: {{2}}.\n\nOur team will review it and update you here shortly.",
+    bodyExamples: ["BRX-2026-0042", "Price change"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  change_approved: {
+    name: "change_approved",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "Your change request for property {{1}} has been approved: {{2}}.\n\nThe update is now live on your Brixora listing.",
+    bodyExamples: ["BRX-2026-0042", "Price change"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  change_rejected: {
+    name: "change_rejected",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "We couldn't approve your change request for property {{1}} ({{2}}).\n\nReason: {{3}}\n\nYour listing stays as it was. Reply to this message if you have any questions.",
+    bodyExamples: ["BRX-2026-0042", "Price change", "Price is outside the market range"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  sold_confirmed: {
+    name: "sold_confirmed",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "Congratulations! Your property {{1}} has been marked as sold and removed from the Brixora listings.\n\nThank you for choosing Brixora, and all the best for what's next.",
+    bodyExamples: ["BRX-2026-0042"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  enquiry_forward: {
+    name: "enquiry_forward",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "New enquiry for property {{1}}.\n\nName: {{2}}\nPhone: {{3}}\nMessage: {{4}}\n\nOpen the enquiry: {{5}}\n\nPlease reply to the customer as soon as you can.",
+    bodyExamples: ["BRX-2026-0042", "Anita", "+91 98450 12345", "Is this still available?", "https://brixora.in/properties/BRX-2026-0042"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  enquiry_reply: {
+    name: "enquiry_reply",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "Hi {{1}}, the Brixora team has replied to your enquiry about property {{2}}.\n\nRead the reply here: {{3}}\n\nYou can continue the conversation from your Brixora account.",
+    bodyExamples: ["Anita", "BRX-2026-0042", "https://brixora.in/account/enquiries"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  site_visit_scheduled: {
+    name: "site_visit_scheduled",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "Your site visit for property {{1}} is confirmed for {{2}}.\n\nOur team will share the location and contact details before the visit. Reply here if you need to reschedule.",
+    bodyExamples: ["BRX-2026-0042", "12 Nov 2026, 11:00 AM"],
+    footer: "Brixora",
+    buttons: [],
+  },
+  staff_invite: {
+    name: "staff_invite",
+    category: "UTILITY",
+    header: { format: "NONE" },
+    body: "Hi {{1}}, you've been invited to join the Brixora team.\n\nSet your password and sign in here: {{2}}\n\nThis link is just for you, so please don't share it.",
+    bodyExamples: ["Priya", "https://brixora.in/admin/forgot-password"],
+    footer: "Brixora",
+    buttons: [],
+  },
+};

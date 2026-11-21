@@ -14,6 +14,7 @@ import { OrganizationForm, ProfileForm, SiteDetailsForm, TestEmailForm } from ".
 import { SITE_FIELDS, savedSiteDetails } from "@/lib/site-settings";
 import { EnvVariables } from "./EnvVariables";
 import { WhatsAppConnect } from "./WhatsAppConnect";
+import { CopyText, WhatsAppHealth } from "./WhatsAppHealth";
 import { WhatsAppTemplates } from "./WhatsAppTemplates";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -22,7 +23,7 @@ const SECTIONS = [
   { key: "profile", label: "Profile", hint: "Your name, phone and password", adminOnly: false },
   { key: "organization", label: "Organization", hint: "Colours, listings and verification", adminOnly: true },
   { key: "users", label: "Users & roles", hint: "Staff accounts and workload", adminOnly: true },
-  { key: "whatsapp", label: "WhatsApp", hint: "Connect the business number", adminOnly: true },
+  { key: "whatsapp", label: "WhatsApp", hint: "Cloud API number and health check", adminOnly: true },
   { key: "templates", label: "WhatsApp templates", hint: "Names, language, test sends", adminOnly: true },
   { key: "env", label: "Environment variables", hint: "WhatsApp and email keys", adminOnly: true },
   { key: "security", label: "Security", hint: "Sign-in and integrations", adminOnly: true },
@@ -194,49 +195,67 @@ async function WhatsAppSection() {
   const appId = configured(e.META_APP_ID) ? e.META_APP_ID!.trim() : "";
   const configId = configured(e.WHATSAPP_ES_CONFIG_ID) ? e.WHATSAPP_ES_CONFIG_ID!.trim() : "";
   const appSecretReady = configured(e.WHATSAPP_APP_SECRET);
+  const signupReady = Boolean(appId && configId && appSecretReady);
+  const showCoexistence = conn?.source === "connected" || signupReady;
   const envProblems = await whatsappEnvProblems();
   const forwardTo = await brokeragePhone();
   const selfForward = Boolean(conn?.displayPhone && forwardTo && normalizePhone(conn.displayPhone) === forwardTo);
+  const webhookUrl = `${site.url}/api/whatsapp/webhook`;
   const rows = conn
     ? [
         { label: "Number", value: conn.displayPhone || "—" },
         { label: "Business name", value: conn.verifiedName || "—" },
         { label: "Phone number ID", value: conn.phoneNumberId },
         { label: "WhatsApp Business Account ID", value: conn.wabaId || "—" },
-        { label: "Connected", value: conn.source === "env" ? "From WHATSAPP_TOKEN (environment)" : conn.connectedAt ? formatDateTime(conn.connectedAt) : "—" },
+        { label: "Source", value: conn.source === "env" ? "Environment variables (WHATSAPP_TOKEN)" : conn.connectedAt ? `Linked app number, ${formatDateTime(conn.connectedAt)}` : "Linked app number" },
       ]
     : [];
+  const links = [
+    { href: "/admin/templates", label: "Templates", hint: "Create and check message templates" },
+    { href: "/admin/broadcasts", label: "Broadcasts", hint: "Send campaigns to clients and lists" },
+    { href: "/admin/messages", label: "Message log", hint: "Every message and its delivery status" },
+  ];
   return (
     <>
       <Card
-        title="WhatsApp Business"
-        description="Connect the brokerage's existing WhatsApp Business app number. Website messages (login codes, listing updates, enquiry replies) go out from it, and the team keeps chatting in the app on the phone."
+        title="WhatsApp Cloud API"
+        description="Website messages (login codes, welcome, listing updates, enquiry replies, broadcasts) go out from this number."
       >
         {conn ? (
-          <dl className="mb-5 grid gap-4 sm:grid-cols-2">
-            {rows.map((r) => (
-              <div key={r.label}>
-                <dt className="label">{r.label}</dt>
-                <dd className="break-all text-sm font-semibold text-[var(--s-text)]">{r.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <>
+            <dl className="mb-5 grid gap-4 sm:grid-cols-2">
+              {rows.map((r) => (
+                <div key={r.label}>
+                  <dt className="label">{r.label}</dt>
+                  <dd className="break-all text-sm font-semibold text-[var(--s-text)]">{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <WhatsAppHealth />
+          </>
         ) : (
-          <p className="mb-5 text-sm text-[var(--s-muted)]">Not connected. Messages are logged but not sent.</p>
-        )}
-        {!conn && envProblems.length > 0 && (
-          <p className="mb-5 rounded-xl bg-[var(--s-seg)] p-3 text-sm text-[var(--s-late)]">
-            {envProblems.join(" and ")} {envProblems.length > 1 ? "are" : "is"} set on the server but still {envProblems.length > 1 ? "hold placeholder text" : "holds placeholder text"}, not
-            a real value. These are optional manual Cloud API fallback credentials. A successful WhatsApp Business app signup stores the production credentials automatically; do not use Meta&apos;s test sender credentials for this production number.
-          </p>
-        )}
-        {appId && configId && appSecretReady ? (
-          <WhatsAppConnect appId={appId} configId={configId} version={await graphVersion()} connected={conn?.source === "connected"} />
-        ) : (
-          <p className="text-sm text-[var(--s-text-2)]">
-            Set valid <code>META_APP_ID</code>, <code>WHATSAPP_ES_CONFIG_ID</code> and <code>WHATSAPP_APP_SECRET</code> in{" "}
-            <Link href="/admin/settings?section=env" className="underline">Environment variables</Link> to enable signup. After Meta approves the partner setup, use this button to connect the production number; credentials are stored automatically.
-          </p>
+          <>
+            <p className="mb-4 text-sm text-[var(--s-muted)]">Not set up yet. Messages are logged but not sent.</p>
+            <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--s-text-2)]">
+              <li>
+                In Meta Business Suite, add a phone number to your WhatsApp Business Account and create a System User with a permanent token
+                (whatsapp_business_messaging and whatsapp_business_management).
+              </li>
+              <li>
+                In <Link href="/admin/settings?section=env" className="font-semibold underline">Environment variables</Link>, set <code>WHATSAPP_TOKEN</code>,{" "}
+                <code>WHATSAPP_WABA_ID</code>, <code>WHATSAPP_APP_SECRET</code>, <code>WHATSAPP_VERIFY_TOKEN</code> and <code>META_APP_ID</code>.
+              </li>
+              <li>
+                In <Link href="/admin/settings?section=organization" className="font-semibold underline">Website details</Link>, enter the WhatsApp Phone number ID.
+              </li>
+            </ol>
+            {envProblems.length > 0 && (
+              <p className="mt-4 rounded-xl bg-[var(--s-seg)] p-3 text-sm text-[var(--s-late)]">
+                {envProblems.join(" and ")} {envProblems.length > 1 ? "are" : "is"} set on the server but still{" "}
+                {envProblems.length > 1 ? "hold placeholder text" : "holds placeholder text"}, not a real value.
+              </p>
+            )}
+          </>
         )}
         {selfForward && (
           <p className="mt-4 rounded-xl bg-[var(--s-seg)] p-3 text-sm text-[var(--s-late)]">
@@ -245,14 +264,48 @@ async function WhatsAppSection() {
           </p>
         )}
       </Card>
-      <Card title="Before you connect">
-        <ul className="list-disc space-y-1.5 pl-5 text-sm text-[var(--s-text-2)]">
-          <li>Have the phone with the WhatsApp Business app (latest version) nearby. Meta shows a QR code or prompt to confirm in the app.</li>
-          <li>Open the WhatsApp Business app at least once every 14 days, or Meta disconnects the API.</li>
-          <li>Chats sent from the app and from the website show up in the same conversation on the phone.</li>
-          <li>When Meta asks, choose to connect without importing existing contacts or chat history.</li>
-        </ul>
+      <Card title="Quick links">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {links.map((l) => (
+            <Link key={l.href} href={l.href} className="rounded-2xl border border-[var(--s-border)] p-4 transition-colors hover:bg-[var(--s-hover)]">
+              <p className="text-sm font-bold text-[var(--s-text)]">{l.label}</p>
+              <p className="mt-1 text-xs text-[var(--s-muted)]">{l.hint}</p>
+            </Link>
+          ))}
+        </div>
+        <div className="mt-4">
+          <p className="label">Webhook URL</p>
+          <CopyText value={webhookUrl} />
+          <p className="mt-1 text-xs text-[var(--s-muted)]">
+            Paste into Meta → WhatsApp → Configuration with your WHATSAPP_VERIFY_TOKEN, and subscribe to the messages field.
+          </p>
+        </div>
       </Card>
+      {showCoexistence && (
+        <details className="card p-6 sm:p-7">
+          <summary className="cursor-pointer text-sm font-bold text-[var(--s-text)]">Advanced: link a WhatsApp Business app number (coexistence)</summary>
+          <div className="mt-4 space-y-4">
+            <p className="text-sm text-[var(--s-text-2)]">
+              Optional. Links a number that stays in use in the WhatsApp Business app on a phone, so the team can keep chatting there. Not needed for a
+              Cloud API number.
+            </p>
+            <ul className="list-disc space-y-1.5 pl-5 text-sm text-[var(--s-text-2)]">
+              <li>Have the phone with the WhatsApp Business app (latest version) nearby. Meta shows a QR code or prompt to confirm in the app.</li>
+              <li>Open the WhatsApp Business app at least once every 14 days, or Meta disconnects the API.</li>
+              <li>Chats sent from the app and from the website show up in the same conversation on the phone.</li>
+              <li>When Meta asks, choose to connect without importing existing contacts or chat history.</li>
+            </ul>
+            {signupReady ? (
+              <WhatsAppConnect appId={appId} configId={configId} version={await graphVersion()} connected={conn?.source === "connected"} />
+            ) : (
+              <p className="text-sm text-[var(--s-text-2)]">
+                To relink or change this number, set <code>META_APP_ID</code>, <code>WHATSAPP_ES_CONFIG_ID</code> and <code>WHATSAPP_APP_SECRET</code> in{" "}
+                <Link href="/admin/settings?section=env" className="underline">Environment variables</Link>.
+              </p>
+            )}
+          </div>
+        </details>
+      )}
     </>
   );
 }

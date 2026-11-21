@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
-import { metaTemplates, whatsappConnection } from "@/lib/whatsapp";
-import { LIMITS, type TemplateCategory } from "@/lib/wa-template-types";
+import { metaTemplates, TEMPLATES, whatsappConnection } from "@/lib/whatsapp";
+import { LIMITS, SUGGESTED_TEMPLATES, type TemplateCategory } from "@/lib/wa-template-types";
 import { PageHeader } from "@/components/admin/ui";
-import { TemplateBuilder, type BuilderPrefill } from "./TemplateBuilder";
+import { TemplateBuilder, type BuilderPrefill, type BuilderSuggestion } from "./TemplateBuilder";
 
 export const metadata: Metadata = { title: "New WhatsApp template" };
 
@@ -13,17 +13,32 @@ const MEDIA = ["IMAGE", "VIDEO", "DOCUMENT"] as const;
 
 export default async function NewTemplatePage({ searchParams }: PageProps<"/admin/templates/new">) {
   await requireAdmin();
-  const { from, lang } = await searchParams;
+  const { from, lang, for: forParam } = await searchParams;
   const conn = await whatsappConnection();
   const ready = Boolean(conn?.wabaId);
   const meta = ready ? await metaTemplates() : null;
+
+  const existing = (meta ?? []).map((t) => ({ name: t.name, language: t.language }));
+
+  // "?for=<website message key>" (Settings → WhatsApp templates → Create in Meta): start
+  // from the suggested template for that message. It wins over "?from".
+  let suggestion: BuilderSuggestion | null = null;
+  const forKey = typeof forParam === "string" ? forParam : null;
+  const website = forKey ? TEMPLATES.find((t) => t.key === forKey) : undefined;
+  const suggested = website ? SUGGESTED_TEMPLATES[website.key] : undefined;
+  if (website && suggested) {
+    // Pick a free name if Meta already has one with the suggested name in English.
+    let name = suggested.name;
+    for (let i = 2; existing.some((t) => t.name === name && t.language === "en"); i++) name = `${suggested.name}_${i}`;
+    suggestion = { key: website.key, purpose: website.purpose, draft: { ...suggested, name, language: "en" } };
+  }
 
   // "Copy as new": start from an existing template. Button links and phone numbers
   // aren't part of MetaTemplate, so buttons come over by text and need their details again.
   let prefill: BuilderPrefill | null = null;
   const fromName = typeof from === "string" ? from : null;
   const fromLang = typeof lang === "string" ? lang : null;
-  if (fromName && meta) {
+  if (!suggestion && fromName && meta) {
     const t = meta.find((x) => x.name === fromName && (!fromLang || x.language === fromLang));
     if (t) {
       const media = MEDIA.find((f) => f === t.headerFormat);
@@ -41,8 +56,7 @@ export default async function NewTemplatePage({ searchParams }: PageProps<"/admi
     }
   }
 
-  const existing = (meta ?? []).map((t) => ({ name: t.name, language: t.language }));
-  const notFound = fromName && meta && !prefill;
+  const notFound = !suggestion && fromName && meta && !prefill;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -75,7 +89,9 @@ export default async function NewTemplatePage({ searchParams }: PageProps<"/admi
           Couldn&apos;t find <strong className="font-mono">{fromName}</strong> in Meta, so the builder starts empty.
         </div>
       )}
-      <TemplateBuilder disabled={!ready} prefill={prefill} existing={existing} businessName={conn?.verifiedName || "Brixora"} />
+      <TemplateBuilder
+        key={suggestion ? `for:${suggestion.key}` : (prefill?.source ?? "new")}
+        disabled={!ready} prefill={prefill} suggestion={suggestion} existing={existing} businessName={conn?.verifiedName || "Brixora"} />
     </div>
   );
 }

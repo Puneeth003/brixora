@@ -81,6 +81,7 @@ function AddDialog({
   rows,
   meta,
   editing,
+  preselect,
   onClose,
   onDone,
 }: {
@@ -88,6 +89,8 @@ function AddDialog({
   rows: TemplateRow[];
   meta: MetaTemplate[] | null;
   editing: TemplateRow | null;
+  /** Website message to start on when adding ("Add existing" in the not-set-up list). */
+  preselect: string | null;
   onClose: () => void;
   onDone: (s: ActionState) => void;
 }) {
@@ -103,7 +106,7 @@ function AddDialog({
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) {
-      const first = editing ?? rows.find((r) => !r.added) ?? null;
+      const first = editing ?? rows.find((r) => !r.added && r.key === preselect) ?? rows.find((r) => !r.added) ?? null;
       setKey(first?.key ?? "");
       setChoice(editing ? metaKey(editing.name, editing.lang) : "");
       setName(editing?.name ?? first?.key ?? "");
@@ -111,10 +114,12 @@ function AddDialog({
       setError(null);
       d.showModal();
     } else if (!open && d.open) d.close();
-  }, [open, editing, rows]);
+  }, [open, editing, preselect, rows]);
 
   const row = rows.find((r) => r.key === key);
   const picked = meta?.find((m) => metaKey(m.name, m.language) === choice) ?? null;
+  // Meta has nothing approved that this message could use: offer to create the suggested one.
+  const noSuitable = Boolean(meta && row && !meta.some((m) => m.status === "APPROVED" && varCount(m.body) === row.params.length));
   const available = rows.filter((r) => !r.added || r.key === editing?.key);
   // Approved first, then the rest, each alphabetical.
   const metaOptions = [...(meta ?? [])]
@@ -183,6 +188,14 @@ function AddDialog({
               searchPlaceholder="Search templates…"
               options={metaOptions}
             />
+            {noSuitable && row && (
+              <p className="mt-1 text-xs text-[var(--s-muted)]">
+                No suitable template in Meta yet.{" "}
+                <Link href={`/admin/templates/new?for=${encodeURIComponent(row.key)}`} className="font-bold text-[var(--brand)] underline-offset-2 hover:underline">
+                  Create one →
+                </Link>
+              </p>
+            )}
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -228,12 +241,14 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
   const [state, setState] = useState<ActionState>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [dialog, setDialog] = useState<{ editing: TemplateRow | null } | null>(null);
+  const [dialog, setDialog] = useState<{ editing: TemplateRow | null; preselect?: string } | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
   const added = templates.filter((r) => r.added);
   const loginDefault = templates.find((r) => r.key === "otp_login" && !r.added);
   const remaining = templates.filter((r) => !r.added).length;
+  // Website messages that aren't sent yet (the login code has a default), welcome first.
+  const notSetUp = templates.filter((r) => !r.added && r.key !== "otp_login").sort((a, b) => Number(b.key === "welcome") - Number(a.key === "welcome"));
   const find = (r: TemplateRow) => meta?.find((t) => t.name === r.name && t.language === r.lang) ?? null;
 
   function refresh() {
@@ -360,6 +375,36 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
         </p>
       )}
 
+      {notSetUp.length > 0 && (
+        <section aria-labelledby="tpl-not-set-up" className="space-y-2">
+          <h3 id="tpl-not-set-up" className="text-sm font-extrabold text-[var(--s-text)]">
+            Not set up yet
+          </h3>
+          <p className="text-xs text-[var(--s-muted)]">The website doesn&apos;t send these messages until a template is added.</p>
+          <ul className="divide-y divide-[var(--s-border)] rounded-2xl border border-[var(--s-border)]">
+            {notSetUp.map((r) => (
+              <li key={r.key} className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-[var(--s-text)]">
+                    {r.purpose} <span className="ml-1 text-xs font-semibold text-[var(--s-muted)]">{r.category}</span>
+                  </p>
+                  {r.key === "welcome" && <p className="mt-0.5 text-xs text-[var(--s-muted)]">Sent once to a new customer, just before their first login code.</p>}
+                  {r.params.length > 0 && <p className="mt-0.5 text-xs text-[var(--s-muted)]">Sends {r.params.map((p, i) => `{{${i + 1}}} ${p}`).join(", ")}</p>}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link href={`/admin/templates/new?for=${encodeURIComponent(r.key)}`} className="btn-primary px-3 py-1.5 text-sm">
+                    Create in Meta
+                  </Link>
+                  <button type="button" onClick={() => setDialog({ editing: null, preselect: r.key })} className="btn-secondary px-3 py-1.5 text-sm">
+                    Add existing
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <Status state={state} />
 
       <AddDialog
@@ -367,6 +412,7 @@ export function WhatsAppTemplates({ templates, meta }: { templates: TemplateRow[
         rows={templates}
         meta={meta}
         editing={dialog?.editing ?? null}
+        preselect={dialog?.preselect ?? null}
         onClose={() => setDialog(null)}
         onDone={(s) => {
           setDialog(null);

@@ -4,7 +4,7 @@ import { getOwner, recordAttempt, startSession, tooManyAttempts } from "@/lib/au
 import { db, dbConfigured, transaction, uuid } from "@/lib/db";
 import { hmac, randomDigits, safeEqual } from "@/lib/crypto";
 import { normalizeIndianPhone } from "@/lib/format";
-import { recentOtpCount, sendOtp, whatsappConnection } from "@/lib/whatsapp";
+import { recentOtpCount, sendOtp, sendWelcomeIfNew, whatsappConnection } from "@/lib/whatsapp";
 
 // Owner sign-in: phone → 6-digit code on WhatsApp → session cookie.
 
@@ -39,6 +39,8 @@ export async function sendLoginCode(rawPhone: string): Promise<Result> {
   await db.run("UPDATE otp_codes SET consumed_at = UTC_TIMESTAMP(3) WHERE phone = ? AND consumed_at IS NULL", [phone]);
   await db.insert("otp_codes", { id: uuid(), phone, code_hash: codeHash(phone, code), expires_at: new Date(Date.now() + CODE_TTL_MS) });
 
+  // New customers get the welcome message first, so it arrives just above the code.
+  await sendWelcomeIfNew(phone);
   if (!(await sendOtp(phone, code))) return { ok: false, error: "Could not send the code on WhatsApp. Please try again." };
   return { ok: true };
 }

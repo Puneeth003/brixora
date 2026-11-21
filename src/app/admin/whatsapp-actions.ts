@@ -7,7 +7,7 @@ import { encrypt } from "@/lib/crypto";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { normalizeIndianPhone } from "@/lib/format";
-import { graphVersion, sendTemplateTest, TEMPLATES, whatsappConnection, type TemplateName } from "@/lib/whatsapp";
+import { graphVersion, sendTemplateTest, templateSettings, TEMPLATES, whatsappConnection, type TemplateName } from "@/lib/whatsapp";
 import type { ActionState } from "@/lib/types";
 
 // Connects the brokerage's existing WhatsApp Business app number to the Cloud API
@@ -153,4 +153,151 @@ export async function sendTemplateTestAction(template: string, phone: string): P
   const res = await sendTemplateTest(template as TemplateName, to);
   revalidatePath("/admin/messages");
   return res.ok ? { ok: true, message: `Sent ${template} to ${to}. Check that phone, and Admin → Messages for delivery.` } : { ok: false, error: `Not sent: ${res.error}` };
+}
+
+// ---------------------------------------------------------------------------
+// Settings → WhatsApp → "Check connection"
+// ---------------------------------------------------------------------------
+
+export type HealthCheck = {
+  key: string;
+  label: string;
+  state: "ok" | "warn" | "fail";
+  detail: string;
+  /** A one-click fix the page can offer. */
+  fix?: "subscribe";
+};
+
+/**
+ * Checks every link in the chain with Meta's API: credentials, the number, the business
+ * account, the webhook subscription, the templates. Read-only; never sends a message.
+ */
+export async function checkWhatsApp(): Promise<HealthCheck[]> {
+  await requireAdmin();
+  const out: HealthCheck[] = [];
+  const add = (c: HealthCheck) => out.push(c);
+  const conn = await whatsappConnection();
+  if (!conn) {
+    add({ key: "credentials", label: "Credentials", state: "fail", detail: "WHATSAPP_TOKEN and the Phone number ID aren't set (or still hold placeholder text). Add them in Environment variables and Website details." });
+    return out;
+  }
+  add({ key: "credentials", label: "Credentials", state: "ok", detail: conn.source === "env" ? "Token and Phone number ID found." : "Using the number connected with Meta signup." });
+
+  type Phone = {
+    display_phone_number?: string;
+    verified_name?: string;
+    quality_rating?: string;
+    code_verification_status?: string;
+    name_status?: string;
+    status?: string;
+    platform_type?: string;
+    messaging_limit_tier?: string;
+  };
+  try {
+    const p = await call<Phone>(
+      await graph(`${conn.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,code_verification_status,name_status,status,platform_type,messaging_limit_tier`),
+      { token: conn.token },
+    );
+    add({ key: "token", label: "Access token", state: "ok", detail: "Meta accepted the token." });
+    const status = (p.status ?? "").toUpperCase();
+    add({
+      key: "number",
+      label: "Phone number",
+      state: status === "CONNECTED" ? "ok" : status ? "fail" : "warn",
+      detail: `${p.display_phone_number ?? "?"} (${p.verified_name ?? "no name"}): ${status ? status.toLowerCase() : "status unknown"}${p.platform_type ? `, ${p.platform_type.replace(/_/g, " ").toLowerCase()}` : ""}.${
+        status && status !== "CONNECTED" ? " Register the number in WhatsApp Manager (set the two-step PIN) so it can send." : ""
+      }`,
+    });
+    add({
+      key: "name",
+      label: "Display name",
+      state: p.name_status === "APPROVED" || p.name_status === "AVAILABLE_WITHOUT_REVIEW" ? "ok" : p.name_status === "DECLINED" ? "fail" : "warn",
+      detail: p.name_status ? `Meta review: ${p.name_status.toLowerCase().replace(/_/g, " ")}.` : "Unknown.",
+    });
+    const q = (p.quality_rating ?? "").toUpperCase();
+    add({
+      key: "quality",
+      label: "Quality and limit",
+      state: q === "GREEN" || q === "UNKNOWN" || !q ? "ok" : q === "YELLOW" ? "warn" : "fail",
+      detail: `Quality ${q ? q.toLowerCase() : "not rated yet"}${p.messaging_limit_tier ? `; limit ${p.messaging_limit_tier.replace("TIER_", "").replace("_", " ").toLowerCase()} customers a day` : ""}.`,
+    });
+  } catch (e) {
+    add({ key: "token", label: "Access token", state: "fail", detail: `Meta refused: ${e instanceof Error ? e.message : String(e)}. Generate a permanent System User token with whatsapp_business_messaging and whatsapp_business_management.` });
+    return out;
+  }
+
+  if (!conn.wabaId) {
+    add({ key: "waba", label: "Business account", state: "fail", detail: "WHATSAPP_WABA_ID isn't set. Templates, broadcasts and the webhook check need it." });
+  } else {
+    try {
+      const w = await call<{ name?: string; account_review_status?: string }>(await graph(`${conn.wabaId}?fields=name,account_review_status`), { token: conn.token });
+      add({
+        key: "waba",
+        label: "Business account",
+        state: !w.account_review_status || w.account_review_status === "APPROVED" ? "ok" : "warn",
+        detail: `${w.name ?? conn.wabaId}${w.account_review_status ? `: review ${w.account_review_status.toLowerCase()}` : ""}.`,
+      });
+      const subs = await call<{ data?: { whatsapp_business_api_data?: { id?: string; name?: string } }[] }>(await graph(`${conn.wabaId}/subscribed_apps`), { token: conn.token });
+      const appId = ((await env("META_APP_ID")) ?? "").trim();
+      const apps = subs.data ?? [];
+      const ours = apps.some((a) => !appId || a.whatsapp_business_api_data?.id === appId);
+      add({
+        key: "subscribed",
+        label: "App subscribed to the account",
+        state: apps.length && ours ? "ok" : "fail",
+        detail: apps.length && ours ? "Meta sends this account's delivery updates and replies to the app." : "The app isn't subscribed, so no delivery statuses or STOP replies arrive.",
+        fix: apps.length && ours ? undefined : "subscribe",
+      });
+      const t = await call<{ data?: { name: string; status: string; category: string }[] }>(await graph(`${conn.wabaId}/message_templates?fields=name,status,category&limit=200`), { token: conn.token });
+      const list = t.data ?? [];
+      const settings = await templateSettings();
+      const approved = (name: string) => list.some((x) => x.name === name && x.status === "APPROVED");
+      add({
+        key: "templates",
+        label: "Templates",
+        state: approved(settings.otp_login.name) ? "ok" : "fail",
+        detail: `${list.filter((x) => x.status === "APPROVED").length} approved of ${list.length}. Login code template "${settings.otp_login.name}": ${
+          approved(settings.otp_login.name) ? "approved" : "not approved or missing, so sign-in codes can't be sent"
+        }. Welcome message: ${settings.welcome.added ? `"${settings.welcome.name}"${approved(settings.welcome.name) ? " approved" : " not approved yet"}` : "not set up"}.`,
+      });
+    } catch (e) {
+      add({ key: "waba", label: "Business account", state: "fail", detail: `Meta refused: ${e instanceof Error ? e.message : String(e)}. Check WHATSAPP_WABA_ID and that the token's system user has this account assigned.` });
+    }
+  }
+
+  const [secret, verify, appId] = await Promise.all([env("WHATSAPP_APP_SECRET"), env("WHATSAPP_VERIFY_TOKEN"), env("META_APP_ID")]);
+  const last = await db.one<{ value: string }>("SELECT value FROM app_config WHERE name = 'webhook_last_at'");
+  // Stored as epoch milliseconds (an ISO string would be turned into a DATETIME by db params).
+  const lastAt = last && /^\d+$/.test(last.value) ? new Date(Number(last.value)) : null;
+  add({
+    key: "webhook",
+    label: "Webhook",
+    state: !secret || !verify ? "fail" : lastAt ? "ok" : "warn",
+    detail:
+      !secret || !verify
+        ? `${[!secret && "WHATSAPP_APP_SECRET", !verify && "WHATSAPP_VERIFY_TOKEN"].filter(Boolean).join(" and ")} not set. Without them Meta's events are refused.`
+        : lastAt
+          ? `Last event from Meta ${lastAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" })}.`
+          : "No event received yet. In Meta → WhatsApp → Configuration set the callback URL to https://<your domain>/api/whatsapp/webhook, the verify token, and subscribe to messages; then send a test.",
+  });
+  add({
+    key: "app",
+    label: "Meta app ID",
+    state: appId?.trim() ? "ok" : "warn",
+    detail: appId?.trim() ? "Set (needed to upload template header samples)." : "META_APP_ID isn't set: image / video / document template headers can't be uploaded.",
+  });
+  return out;
+}
+
+/** "Fix" for the subscription check: subscribes the app to the WhatsApp Business Account. */
+export async function subscribeWhatsAppApp(): Promise<ActionState> {
+  await requireAdmin();
+  const conn = await whatsappConnection();
+  if (!conn?.wabaId) return { ok: false, error: "Set WHATSAPP_WABA_ID first." };
+  try {
+    await call(await graph(`${conn.wabaId}/subscribed_apps`), { method: "POST", token: conn.token });
+    return { ok: true, message: "Subscribed. Delivery updates and replies will now reach the website." };
+  } catch (e) {
+    return { ok: false, error: `Meta: ${e instanceof Error ? e.message : String(e)}` };
+  }
 }

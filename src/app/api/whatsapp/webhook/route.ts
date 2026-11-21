@@ -49,6 +49,11 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  // For Settings → WhatsApp → Check connection ("last event from Meta").
+  await db
+    .run("INSERT INTO app_config (name, value) VALUES ('webhook_last_at', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [String(Date.now())])
+    .catch(() => {});
+
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const value = change.value ?? {};
