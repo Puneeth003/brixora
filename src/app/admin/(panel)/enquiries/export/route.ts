@@ -1,5 +1,6 @@
 import { checkAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { connection } from "next/server";
 
 function csvCell(v: unknown) {
   let s = v === null || v === undefined ? "" : String(v);
@@ -9,6 +10,9 @@ function csvCell(v: unknown) {
 }
 
 export async function GET() {
+  // Always per request: never prerendered at build time (cacheComponents). Without this the
+  // build could stop here when an earlier await finished after the prerender window.
+  await connection();
   const check = await checkAdmin();
   if (check.status !== "ok") return new Response("Unauthorized", { status: 401 });
 

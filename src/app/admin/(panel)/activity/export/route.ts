@@ -4,6 +4,7 @@ import { configValue, db } from "@/lib/db";
 import { getSite } from "@/lib/site-settings";
 import { excelDateTime, reportWorkbook, type ReportColumn } from "@/lib/xlsx";
 import { describe, feedRows, istDateTime, type FeedRow } from "../feed";
+import { connection } from "next/server";
 
 // The activity feed as a download, with the same filters as the page (passed in the
 // query string): a formatted Excel report by default, plain CSV with ?format=csv.
@@ -84,6 +85,9 @@ async function subtitle(filters: FeedFilters, count: number) {
 }
 
 export async function GET(request: Request) {
+  // Always per request: never prerendered at build time (cacheComponents). Without this the
+  // build could stop here when an earlier await finished after the prerender window.
+  await connection();
   const check = await checkAdmin();
   if (check.status !== "ok") return new Response("Unauthorized", { status: 401 });
 

@@ -4,6 +4,7 @@ import { safeEqual } from "@/lib/crypto";
 import { env } from "@/lib/env";
 import { optIn, optOut, recordBroadcastReply, recordBroadcastStatus } from "@/lib/broadcast";
 import { normalizePhone } from "@/lib/whatsapp";
+import { connection } from "next/server";
 
 // Meta WhatsApp webhook: delivery status updates (website messages and broadcasts),
 // replies to broadcasts, and inbound STOP / START replies.
@@ -27,6 +28,9 @@ async function validSignature(body: string, header: string | null) {
 }
 
 export async function GET(request: Request) {
+  // Always per request: never prerendered at build time (cacheComponents). Without this the
+  // build could stop here when an earlier await finished after the prerender window.
+  await connection();
   const url = new URL(request.url);
   const token = await env("WHATSAPP_VERIFY_TOKEN");
   const ok =

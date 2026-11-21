@@ -4,6 +4,7 @@ import { safeEqual } from "@/lib/crypto";
 import { env } from "@/lib/env";
 import { removeStoredImage } from "@/lib/images";
 import { removeFile } from "@/lib/storage";
+import { connection } from "next/server";
 
 // Daily housekeeping, called by a Hostinger cron job (or any external scheduler):
 //   curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://<your domain>/api/cron/expire-listings
@@ -13,6 +14,9 @@ import { removeFile } from "@/lib/storage";
 // missed run is harmless.
 
 export async function GET(request: Request) {
+  // Always per request: never prerendered at build time (cacheComponents). Without this the
+  // build could stop here when an earlier await finished after the prerender window.
+  await connection();
   const secret = await env("CRON_SECRET");
   const auth = request.headers.get("authorization") ?? "";
   if (!secret || !safeEqual(auth, `Bearer ${secret}`)) return new Response("Unauthorized", { status: 401 });
