@@ -155,6 +155,14 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
           {unread > 0 && <span className="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-red-500" aria-hidden />}
         </span>
         <span className="hidden text-sm font-semibold whitespace-nowrap text-zinc-800 lg:block lg:text-base">My listings</span>
+        <svg
+          viewBox="0 0 20 20"
+          className={`hidden size-4 text-zinc-400 transition-transform lg:block ${open ? "rotate-180" : ""}`}
+          fill="currentColor"
+          aria-hidden
+        >
+          <path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4Z" />
+        </svg>
       </button>
 
       {open && (
