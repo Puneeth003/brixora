@@ -30,7 +30,7 @@ export function HeroSearch({ localities }: { localities: string[] }) {
 
   return (
     <div className="relative w-full max-w-[68.75rem]">
-      <div className="inline-flex items-center rounded-t-xl bg-white/95 p-1.5 pb-0 backdrop-blur">
+      <div className="inline-flex max-w-full items-center rounded-t-xl bg-white/95 p-1.5 pb-0 backdrop-blur">
         {TABS.map(({ key, label, icon }, i) => {
           const active = tab === key;
           const sell = key === "sell";
@@ -41,7 +41,7 @@ export function HeroSearch({ localities }: { localities: string[] }) {
                 type="button"
                 onClick={() => setTab(key)}
                 aria-pressed={active}
-                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-colors sm:px-6 ${
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold whitespace-nowrap transition-colors sm:gap-2 sm:px-6 ${
                   active
                     ? sell
                       ? "bg-gradient-to-b from-gold-400 to-gold-600 text-white shadow-md shadow-gold-600/30"
