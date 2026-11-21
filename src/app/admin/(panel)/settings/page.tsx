@@ -378,8 +378,8 @@ async function SecuritySection({ email }: { email: string }) {
         ) : (
           <p className="text-sm text-[var(--s-text-2)]">
             Not configured, so password resets can&apos;t be emailed. Create a mailbox for the domain (Hostinger: hPanel → Emails), then set{" "}
-            <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_SECURE</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> and <code>MAIL_FROM</code> in{" "}
-            <Link href="/admin/settings?section=env" className="underline">Environment variables</Link>.
+            <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_SECURE</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code> and <code>MAIL_FROM</code> in the
+            hosting panel (Hostinger → Environment variables) and redeploy. Mail settings are kept on the server only.
           </p>
         )}
       </Card>

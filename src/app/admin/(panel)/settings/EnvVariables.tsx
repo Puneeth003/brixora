@@ -39,7 +39,8 @@ const isPlaceholder = (v: string) => !v.trim() || /^<.*>$/.test(v.trim()) || /\b
 const WEBSITE_DETAILS = new Set(["BROKERAGE_ENQUIRY_WHATSAPP", "WHATSAPP_PHONE_NUMBER_ID"]);
 
 /** Variables that only the hosting panel can set (the site needs them to start). */
-const SERVER_ONLY = /^(DB_|AUTH_SECRET$|UPLOAD_DIR$|NODE_ENV$)/;
+// Kept in the hosting panel only (the site can't start without them, or mail by choice).
+const SERVER_ONLY = /^(DB_|AUTH_SECRET$|UPLOAD_DIR$|NODE_ENV$|SMTP_|MAIL_FROM)/;
 
 function Status({ state }: { state: ActionState }) {
   if (!state) return null;
@@ -62,6 +63,7 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
   const [confirm, confirmDialog] = useConfirm();
 
   const changed = vars.filter((v) => (values[v.name] ?? "") !== (initial[v.name] ?? ""));
+  const duplicates = vars.filter((v) => v.saved && v.onServer);
   const set = (name: string, value: string) => setValues((vs) => ({ ...vs, [name]: value }));
 
   /** Writes the named variables only; returns a summary of what was used and skipped. */
@@ -222,6 +224,13 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
         </div>
       )}
 
+      {duplicates.length > 0 && (
+        <p role="alert" className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
+          Set in two places: {duplicates.map((v) => v.name).join(", ")}. The value saved here is the one used. Keep one copy: delete{" "}
+          {duplicates.length === 1 ? "it" : "them"} from the hosting panel (Hostinger → Environment variables), or delete the value here to use the server&apos;s.
+        </p>
+      )}
+
       {groups.map((g) => (
         <section key={g} className="space-y-2">
           <h3 className="text-xs font-bold tracking-wide text-[var(--s-muted)] uppercase">{g}</h3>
@@ -235,14 +244,15 @@ export function EnvVariables({ vars }: { vars: EnvVar[] }) {
               .map((v) => {
                 const value = values[v.name] ?? "";
                 const edited = value !== (initial[v.name] ?? "");
-                const source = edited ? "Changed, not saved" : v.saved ? "Saved here" : v.onServer ? "From hosting panel" : "Not set";
+                const duplicate = !edited && v.saved && v.onServer;
+                const source = edited ? "Changed, not saved" : duplicate ? "Saved here, also in hosting panel" : v.saved ? "Saved here" : v.onServer ? "From hosting panel" : "Not set";
                 return (
                   <li key={v.name} className="grid grid-cols-[minmax(0,1fr)_2.25rem] items-start gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_2.25rem]">
                     <div className="min-w-0 sm:pt-2">
                       <p className="truncate font-mono text-xs font-bold text-[var(--s-text)]" title={v.name}>
                         {v.name}
                       </p>
-                      <p className={`text-[11px] ${edited ? "font-bold text-[var(--brand)]" : "text-[var(--s-muted)]"}`}>{source}</p>
+                      <p className={`text-[11px] ${edited ? "font-bold text-[var(--brand)]" : duplicate ? "font-bold text-amber-700" : "text-[var(--s-muted)]"}`}>{source}</p>
                     </div>
                     <button
                       type="button"

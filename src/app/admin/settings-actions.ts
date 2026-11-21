@@ -73,7 +73,7 @@ export async function sendTestEmail(): Promise<ActionState> {
   const staff = await requireAdmin();
   const configured = await mailConfigured();
   if (!configured && process.env.NODE_ENV === "production") {
-    return { ok: false, error: "Email is not configured: set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER and SMTP_PASS in Settings → Environment variables." };
+    return { ok: false, error: "Email is not configured: set SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER and SMTP_PASS in the hosting panel (Hostinger → Environment variables), then redeploy." };
   }
   try {
     await sendMail({ to: staff.email, ...(await testEmail({ name: staff.name })) });

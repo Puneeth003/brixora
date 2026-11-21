@@ -1,6 +1,6 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
-import { envs } from "./env";
+import { SERVER_ENV } from "./env";
 import { getSite, type SiteDetails } from "./site-settings";
 
 // Outgoing email over SMTP (Hostinger: smtp.hostinger.com, port 465, SMTP_SECURE=ssl).
@@ -11,11 +11,10 @@ import { getSite, type SiteDetails } from "./site-settings";
 // "none" = plain, only for a local relay. Mail carries password-reset codes, so an
 // unset or unknown value never falls back to plain text to a remote host.
 
-const MAIL_VARS = ["SMTP_HOST", "SMTP_PORT", "SMTP_SECURE", "SMTP_USER", "SMTP_PASS", "MAIL_FROM", "MAIL_FROM_NAME"] as const;
 type MailEnv = Awaited<ReturnType<typeof mailEnv>>;
 
-/** SMTP settings: Settings → Environment variables, else the server's. */
-const mailEnv = () => envs(...MAIL_VARS);
+/** SMTP settings: the hosting panel's environment variables only (not editable on the site). */
+const mailEnv = async () => Object.fromEntries(SERVER_ENV.map((n) => [n, process.env[n]?.trim() || undefined])) as Record<(typeof SERVER_ENV)[number], string | undefined>;
 
 function tlsMode(e: MailEnv) {
   const v = (e.SMTP_SECURE ?? "").trim().toLowerCase();

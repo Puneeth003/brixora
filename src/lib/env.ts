@@ -6,8 +6,10 @@ import { db } from "./db";
 // touching the hosting panel. Stored encrypted in app_config as "env:<NAME>" and read
 // before process.env, so a value saved here wins over the server's.
 //
-// Database, AUTH_SECRET (the encryption key itself) and UPLOAD_DIR stay server-only:
-// the site can't start without them.
+// Server-only (hosting panel), never here: the database, AUTH_SECRET (the encryption key
+// itself), UPLOAD_DIR and NEXT_PUBLIC_SITE_URL, because the site can't start without them;
+// and mail (SERVER_ENV below), by choice. Each variable lives in one place only: the
+// editor flags any that is set both here and on the server.
 
 export const SETTABLE_ENV = [
   { name: "META_APP_ID", group: "WhatsApp", secret: false, hint: "Meta app ID (App settings → Basic)" },
@@ -20,18 +22,14 @@ export const SETTABLE_ENV = [
   { name: "WHATSAPP_TEMPLATE_LANG", group: "WhatsApp", secret: false, hint: "Template language, e.g. en or en_US" },
   { name: "WHATSAPP_API_VERSION", group: "WhatsApp", secret: false, hint: "Graph API version, e.g. v26.0" },
   { name: "BROKERAGE_ENQUIRY_WHATSAPP", group: "WhatsApp", secret: false, hint: "Team number for enquiry alerts, e.g. 919876543210" },
-  { name: "SMTP_HOST", group: "Email", secret: false, hint: "e.g. smtp.hostinger.com" },
-  { name: "SMTP_PORT", group: "Email", secret: false, hint: "465 or 587" },
-  { name: "SMTP_SECURE", group: "Email", secret: false, hint: "ssl (465) or tls (587)" },
-  { name: "SMTP_USER", group: "Email", secret: false, hint: "Mailbox login" },
-  { name: "SMTP_PASS", group: "Email", secret: true, hint: "Mailbox password" },
-  { name: "MAIL_FROM", group: "Email", secret: false, hint: "Sender address" },
-  { name: "MAIL_FROM_NAME", group: "Email", secret: false, hint: "Sender name" },
   { name: "CRON_SECRET", group: "Security", secret: true, hint: "Bearer token for the daily expire-listings job" },
   { name: "ADMIN_2FA", group: "Security", secret: false, hint: "on (default) or off: staff authenticator step" },
 ] as const;
 
 export type SettableEnvName = (typeof SETTABLE_ENV)[number]["name"];
+
+/** Set in the hosting panel only (read straight from process.env). */
+export const SERVER_ENV = ["SMTP_HOST", "SMTP_PORT", "SMTP_SECURE", "SMTP_USER", "SMTP_PASS", "MAIL_FROM", "MAIL_FROM_NAME"] as const;
 
 export const isSettableEnv = (name: string): name is SettableEnvName => SETTABLE_ENV.some((v) => v.name === name);
 
@@ -96,5 +94,8 @@ export async function writeEnv(changes: [SettableEnvName, string | null][]) {
       await db.run("INSERT INTO app_config (name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [PREFIX + name, encrypt(value)]);
     }
   }
+  // Drop values saved for variables that no longer belong here (e.g. mail, now
+  // server-only), so no second, stale copy (or password) stays in the database.
+  await db.run("DELETE FROM app_config WHERE name LIKE 'env:%' AND name NOT IN (?)", [SETTABLE_ENV.map((v) => PREFIX + v.name)]);
   cache.__brixoraEnv = undefined;
 }
