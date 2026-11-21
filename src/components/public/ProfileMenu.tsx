@@ -15,6 +15,12 @@ export const ACCOUNT_LINKS = [
   { href: "/shortlist", label: "Shortlist" },
 ];
 
+/** The profile menu when signed out. */
+const GUEST_LINKS = [
+  { href: "/manage", label: "My listings" },
+  { href: "/shortlist", label: "Shortlist" },
+];
+
 /** "/account" only matches itself; the others match their section. */
 export function isAccountLinkActive(href: string, pathname: string) {
   return pathname === href || (href !== "/account" && pathname.startsWith(href));
@@ -89,20 +95,6 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
     return () => document.removeEventListener("pointerdown", onPointer);
   }, [open]);
 
-  if (!user) {
-    return (
-      // Only owners have accounts; buyers just enquire.
-      <Link
-        href="/manage"
-        aria-label="Owner login"
-        title="Owner login"
-        className="hidden size-11 place-items-center rounded-full text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-brand-700 sm:grid"
-      >
-        <UserIcon className="size-6" />
-      </Link>
-    );
-  }
-
   function onKeyDown(e: React.KeyboardEvent) {
     if (!open) {
       if (e.key === "ArrowDown" && e.target === buttonRef.current) {
@@ -134,12 +126,15 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
     }
   }
 
-  const mono = initials(user.name);
-  const firstName = user.name?.trim().split(/\s+/)[0] ?? null;
+  const mono = user ? initials(user.name) : null;
+  const firstName = user?.name?.trim().split(/\s+/)[0] ?? null;
   const itemClass = "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm focus-visible:bg-zinc-100 focus-visible:outline-none";
+  // Signed out: the same menu with the owner pages (they lead to the WhatsApp login).
+  const links = user ? ACCOUNT_LINKS : GUEST_LINKS;
 
   return (
-    <div ref={rootRef} className="relative" onKeyDown={onKeyDown}>
+    // Signed out on phones, the menu button covers this (see MobileMenu).
+    <div ref={rootRef} className={`relative ${user ? "" : "hidden sm:block"}`} onKeyDown={onKeyDown}>
       <button
         ref={buttonRef}
         type="button"
@@ -152,7 +147,7 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
         aria-expanded={open}
         aria-controls={open ? `${id}-menu` : undefined}
         aria-label={`${open ? "Close" : "Open"} profile menu${unread > 0 ? ` (${unread} unread ${unread === 1 ? "reply" : "replies"})` : ""}`}
-        title={firstName ?? "My account"}
+        title={user ? (firstName ?? "My account") : "My listings & owner login"}
         className={`flex items-center rounded-full p-1 transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:outline-none ${open ? "bg-zinc-100" : ""}`}
       >
         {/* Icon only: the name and "My account" label were dropped to keep the header short. */}
@@ -170,11 +165,11 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
           className="absolute right-0 z-50 mt-2 w-64 origin-top-right overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl shadow-black/15 ring-1 ring-black/5 animate-[dropdown-in_120ms_ease-out]"
         >
           <div className="border-b border-zinc-100 px-4 py-3">
-            <p className="truncate text-sm font-semibold text-zinc-900">{user.name ?? "Welcome"}</p>
-            <p className="truncate text-xs text-zinc-500">{user.phone}</p>
+            <p className="truncate text-sm font-semibold text-zinc-900">{user ? (user.name ?? "Welcome") : "Property owners"}</p>
+            <p className="truncate text-xs text-zinc-500">{user ? user.phone : "Log in with your WhatsApp number"}</p>
           </div>
           <div className="p-1.5">
-            {ACCOUNT_LINKS.map((m) => {
+            {links.map((m) => {
               const active = isAccountLinkActive(m.href, pathname);
               return (
                 <Link
@@ -192,11 +187,19 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
               );
             })}
           </div>
-          <form action={memberSignOut} className="border-t border-zinc-100 p-1.5">
-            <button type="submit" role="menuitem" className={`${itemClass} text-zinc-700 hover:bg-zinc-50`}>
-              Sign out
-            </button>
-          </form>
+          {user ? (
+            <form action={memberSignOut} className="border-t border-zinc-100 p-1.5">
+              <button type="submit" role="menuitem" className={`${itemClass} text-zinc-700 hover:bg-zinc-50`}>
+                Sign out
+              </button>
+            </form>
+          ) : (
+            <div className="border-t border-zinc-100 p-1.5">
+              <Link href="/login?next=/manage" role="menuitem" onClick={() => setOpen(false)} className={`${itemClass} font-semibold text-brand-700 hover:bg-brand-50`}>
+                Owner login
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>
