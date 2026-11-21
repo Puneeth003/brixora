@@ -11,7 +11,7 @@ export const NAV_LINKS: { href: string; match: string; label: string; highlight?
   { href: "/", match: "/", label: "Home" },
   { href: "/properties?listing=sale", match: "/properties", label: "Buy" },
   { href: "/post", match: "/post", label: "Sell", highlight: true },
-  { href: "/manage", match: "/manage", label: "My Listings" },
+  // My Listings lives in the account menu (ACCOUNT_LINKS).
   { href: "/shortlist", match: "/shortlist", label: "Shortlist" },
 ];
 
@@ -129,8 +129,8 @@ export function MobileMenu({ contactHref, user }: { contactHref: string; user: H
                 <p className="truncate px-3 pb-1 text-xs text-zinc-500">
                   Signed in as <span className="font-semibold text-zinc-800">{user.name ?? user.phone}</span>
                 </p>
-                {/* My Listings and Shortlist are already in the links above. */}
-                {ACCOUNT_LINKS.filter((m) => m.href !== "/manage" && m.href !== "/shortlist").map((m) => (
+                {/* Shortlist is already in the links above. */}
+                {ACCOUNT_LINKS.filter((m) => m.href !== "/shortlist").map((m) => (
                   <Link
                     key={m.href}
                     href={m.href}

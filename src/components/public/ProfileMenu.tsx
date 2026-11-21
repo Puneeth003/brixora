@@ -52,12 +52,12 @@ function initials(name: string | null) {
     .join("");
 }
 
-/** Shown while the session is being read. Sized like the "Sign in" link so the nav doesn't jump. */
+/** Shown while the session is being read. Sized like the profile icon so the nav doesn't jump. */
 export function ProfileFallback() {
-  return <span aria-hidden className="hidden h-9 w-24 animate-pulse rounded-lg bg-zinc-100 sm:block lg:h-10 lg:w-28" />;
+  return <span aria-hidden className="hidden size-11 animate-pulse rounded-full bg-zinc-100 sm:block" />;
 }
 
-/** Header profile: a "Sign in" link when signed out, an avatar with a dropdown when signed in. */
+/** Header profile: an "Owner login" icon when signed out, an avatar with a dropdown when signed in. */
 export function ProfileMenu({ user }: { user: HeaderUser | null }) {
   const id = useId();
   const pathname = usePathname();
@@ -92,9 +92,13 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
   if (!user) {
     return (
       // Only owners have accounts; buyers just enquire.
-      <Link href="/manage" className="btn-ghost hidden font-semibold sm:inline-flex lg:text-base">
-        <UserIcon />
-        Owner login
+      <Link
+        href="/manage"
+        aria-label="Owner login"
+        title="Owner login"
+        className="hidden size-11 place-items-center rounded-full text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-brand-700 sm:grid"
+      >
+        <UserIcon className="size-6" />
       </Link>
     );
   }
@@ -148,21 +152,14 @@ export function ProfileMenu({ user }: { user: HeaderUser | null }) {
         aria-expanded={open}
         aria-controls={open ? `${id}-menu` : undefined}
         aria-label={`${open ? "Close" : "Open"} profile menu${unread > 0 ? ` (${unread} unread ${unread === 1 ? "reply" : "replies"})` : ""}`}
-        className={`flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:outline-none lg:pr-3 ${open ? "bg-zinc-100" : ""}`}
+        title={firstName ?? "My account"}
+        className={`flex items-center rounded-full p-1 transition-colors hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-brand-500/40 focus-visible:outline-none ${open ? "bg-zinc-100" : ""}`}
       >
+        {/* Icon only: the name and "My account" label were dropped to keep the header short. */}
         <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-b from-brand-500 to-brand-700 text-sm font-semibold text-white shadow-sm">
           {mono ?? <UserIcon className="size-5" />}
           {unread > 0 && <span className="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-white bg-red-500" aria-hidden />}
         </span>
-        <span className="hidden max-w-28 truncate text-sm font-semibold text-zinc-800 lg:block lg:text-base">{firstName ?? "My account"}</span>
-        <svg
-          viewBox="0 0 20 20"
-          className={`hidden size-4 text-zinc-400 transition-transform lg:block ${open ? "rotate-180" : ""}`}
-          fill="currentColor"
-          aria-hidden
-        >
-          <path d="M5.3 7.3a1 1 0 0 1 1.4 0L10 10.6l3.3-3.3a1 1 0 1 1 1.4 1.4l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 0 1 0-1.4Z" />
-        </svg>
       </button>
 
       {open && (
