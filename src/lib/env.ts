@@ -23,7 +23,6 @@ export const SETTABLE_ENV = [
   { name: "WHATSAPP_API_VERSION", group: "WhatsApp", secret: false, hint: "Graph API version, e.g. v26.0" },
   { name: "BROKERAGE_ENQUIRY_WHATSAPP", group: "WhatsApp", secret: false, hint: "Team number for enquiry alerts, e.g. 919876543210" },
   { name: "CRON_SECRET", group: "Security", secret: true, hint: "Bearer token for the daily expire-listings job" },
-  { name: "ADMIN_2FA", group: "Security", secret: false, hint: "on (default) or off: staff authenticator step" },
 ] as const;
 
 export type SettableEnvName = (typeof SETTABLE_ENV)[number]["name"];

@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { db, dbConfigured } from "./db";
 import { randomToken, sha256 } from "./crypto";
 import type { Profile } from "./types";
-import { env } from "./env";
 
 // Database-backed sessions. The cookie holds a random token; the sessions table keeps
 // only its SHA-256. Owners and staff (admin + agents) use separate cookies, and the
@@ -24,6 +23,8 @@ type SessionRow = Profile & {
   mfa_verified: boolean;
   email: string | null;
   totp_enabled: boolean;
+  /** Admins switch two-factor sign-in on or off per staff user (Users → user). */
+  mfa_required: boolean | number;
   phone_verified_at: string | null;
   is_active: boolean;
 };
@@ -38,7 +39,7 @@ async function readSession(kind: Kind): Promise<SessionRow | null> {
   const token = (await cookies()).get(COOKIE[kind].name)?.value;
   if (!token) return null;
   return db.one<SessionRow>(
-    `SELECT s.id AS session_id, s.mfa_verified, ${PROFILE_COLUMNS}, u.email, u.totp_enabled, u.phone_verified_at, u.is_active
+    `SELECT s.id AS session_id, s.mfa_verified, ${PROFILE_COLUMNS}, u.email, u.totp_enabled, u.mfa_required, u.phone_verified_at, u.is_active
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.id = ? AND s.kind = ? AND s.expires_at > UTC_TIMESTAMP(3) AND u.is_active = 1`,
     [sha256(token), kind],
@@ -105,8 +106,6 @@ export async function requireOwner(returnTo = "/manage") {
 // Staff: admin (everything) and agents (CRM, their own clients)
 // ---------------------------------------------------------------------------
 
-/** ADMIN_2FA=off skips the authenticator step (password only). On by default. */
-export const adminMfaRequired = async () => ((await env("ADMIN_2FA")) ?? "").trim().toLowerCase() !== "off";
 
 export type StaffRole = "admin" | "agent";
 export type Staff = { userId: string; email: string; name: string | null; role: StaffRole };
@@ -121,7 +120,7 @@ export async function checkStaff(): Promise<StaffCheck> {
   const s = await readSession("admin");
   if (!s?.email) return { status: "signed_out" };
   if (s.role !== "admin" && s.role !== "agent") return { status: "not_admin" };
-  if ((await adminMfaRequired()) && (!s.mfa_verified || !s.totp_enabled)) {
+  if (Number(s.mfa_required) && (!s.mfa_verified || !s.totp_enabled)) {
     return { status: "needs_mfa", enrolled: s.totp_enabled, userId: s.id, email: s.email };
   }
   return { status: "ok", userId: s.id, email: s.email, name: s.name, role: s.role };

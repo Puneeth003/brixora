@@ -10,6 +10,7 @@ import { AgentForm, InviteButton } from "@/components/crm/forms";
 import { PropertyStatusBadge } from "@/components/StatusBadge";
 import { openMemberClient, setMemberActive, setStaffActive } from "../../../crm-actions";
 import type { Agent, PropertyStatus } from "@/lib/types";
+import { MfaSwitch } from "./MfaSwitch";
 
 export const metadata: Metadata = { title: "User" };
 
@@ -32,6 +33,7 @@ type UserRow = {
   last_login_at: string | null;
   has_password: boolean | number;
   totp_enabled: boolean | number;
+  mfa_required: boolean | number;
   wa_opt_out: boolean | number;
   created_at: string;
 };
@@ -78,7 +80,7 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
   const u = await db.one<UserRow>(
     `SELECT id, role, is_active, agent_type, name, email, work_phone, company, rera_no, commission_pct, notes,
             phone, phone_verified_at, last_login_at, (password_hash IS NOT NULL) AS has_password,
-            totp_enabled, wa_opt_out, created_at
+            totp_enabled, mfa_required, wa_opt_out, created_at
        FROM users WHERE id = ?`,
     [id],
   );
@@ -222,7 +224,11 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
               {isMe && <span className="text-xs font-semibold text-[var(--s-muted)]">(you)</span>}
               <span className={`badge ${roleCls[roleLabel]}`}>{roleLabel}</span>
               <span className={`badge ${status.cls}`}>{status.label}</span>
-              {Boolean(Number(u.totp_enabled)) && <span className="badge bg-zinc-100 text-zinc-700">2FA</span>}
+              {staff && !Number(u.mfa_required) ? (
+                <span className="badge bg-amber-50 text-amber-800">2FA off</span>
+              ) : (
+                Boolean(Number(u.totp_enabled)) && <span className="badge bg-zinc-100 text-zinc-700">2FA</span>
+              )}
               {!staff && Boolean(Number(u.wa_opt_out)) && <span className="badge bg-zinc-100 text-zinc-600">WA opt-out</span>}
             </div>
             <p className="mt-0.5 truncate text-sm text-[var(--s-muted)]">
@@ -288,6 +294,9 @@ export default async function UserPage({ params, searchParams }: PageProps<"/adm
                   </form>
                 )}
               </div>
+              {u.email && (
+                <MfaSwitch userId={u.id} on={Boolean(Number(u.mfa_required))} enrolled={Boolean(Number(u.totp_enabled))} isMe={isMe} name={displayName} />
+              )}
             </section>
           </aside>
         </div>

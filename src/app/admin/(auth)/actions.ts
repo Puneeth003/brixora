@@ -1,14 +1,14 @@
 "use server";
 
 import { logActivity } from "@/lib/activity";
-import { adminMfaRequired, checkStaff, clientIp, markSessionMfaVerified, recordAttempt, startSession, tooManyAttempts } from "@/lib/auth";
+import { checkStaff, clientIp, markSessionMfaVerified, recordAttempt, startSession, tooManyAttempts } from "@/lib/auth";
 import { db, dbConfigured, transaction, uuid } from "@/lib/db";
 import { authSecretConfigured, encrypt, hashPassword, hmac, newTotpSecret, randomDigits, randomToken, safeEqual, sha256, tryDecrypt, verifyPassword, verifyTotp } from "@/lib/crypto";
 import { passwordChangedEmail, passwordResetEmail, sendMail } from "@/lib/mail";
 import { passwordProblem } from "@/lib/password";
 
-// Staff sign-in (admin and agents): email + password, then a TOTP code when 2FA is
-// on (ADMIN_2FA). Plus the forgot-password flow: emailed 6-digit code → one-time
+// Staff sign-in (admin and agents): email + password, then a TOTP code when two-factor
+// sign-in is on for that user (users.mfa_required, switched per user by admins). Plus the forgot-password flow: emailed 6-digit code → one-time
 // reset token → new password.
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -16,11 +16,11 @@ type LoginResult = { ok: true; next: string } | { ok: false; error: string };
 
 const normEmail = (raw: unknown) => String(raw ?? "").trim().toLowerCase().slice(0, 254);
 
-type StaffRow = { id: string; name: string | null; email: string; role: string; password_hash: string | null; totp_secret: string | null };
+type StaffRow = { id: string; name: string | null; email: string; role: string; password_hash: string | null; totp_secret: string | null; mfa_required: boolean | number };
 
 function findStaff(email: string) {
   return db.one<StaffRow>(
-    "SELECT id, name, email, role, password_hash, totp_secret FROM users WHERE email = ? AND role IN ('admin', 'agent') AND is_active = 1",
+    "SELECT id, name, email, role, password_hash, totp_secret, mfa_required FROM users WHERE email = ? AND role IN ('admin', 'agent') AND is_active = 1",
     [email],
   );
 }
@@ -44,7 +44,8 @@ export async function adminLogin(rawEmail: string, password: string): Promise<Lo
   await recordAttempt("admin_password", email, valid && Boolean(user));
   if (!user || !valid) return { ok: false, error: "Incorrect email or password." };
 
-  if (!(await adminMfaRequired())) {
+  // Two-factor sign-in is switched off for this user (Users → user, admins only).
+  if (!Number(user.mfa_required)) {
     await startSession("admin", user.id);
     await logSignIn(user.id);
     return { ok: true, next: "/admin" };

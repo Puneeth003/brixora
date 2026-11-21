@@ -22,6 +22,7 @@ type Row = {
   is_active: boolean;
   has_password: boolean;
   totp_enabled: boolean;
+  mfa_required: boolean | number;
   wa_opt_out: boolean;
   created_at: string;
   last_seen: string | null;
@@ -120,7 +121,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
 
   const rows = await db.all<Row>(
     `SELECT u.id, ${KIND_SQL} AS kind, u.name, u.email, u.phone, u.work_phone, u.company,
-            u.is_active, (u.password_hash IS NOT NULL) AS has_password, u.totp_enabled, u.wa_opt_out, u.created_at,
+            u.is_active, (u.password_hash IS NOT NULL) AS has_password, u.totp_enabled, u.mfa_required, u.wa_opt_out, u.created_at,
             CASE WHEN u.role = 'owner' THEN u.last_login_at
                  ELSE (SELECT MAX(s.created_at) FROM sessions s WHERE s.user_id = u.id) END AS last_seen,
             CASE WHEN u.role <> 'owner' THEN (SELECT COUNT(*) FROM clients c WHERE c.assigned_to = u.id AND c.status NOT IN ('won', 'lost')) ELSE 0 END AS open_clients,
@@ -228,7 +229,11 @@ export default async function UsersPage({ searchParams }: PageProps<"/admin/user
                     ) : (
                       <span className="badge bg-emerald-50 text-emerald-700">Active</span>
                     )}
-                    {u.totp_enabled && <span className="badge ml-1 bg-zinc-100 text-zinc-700">2FA</span>}
+                    {!Number(u.mfa_required) ? (
+                      <span className="badge ml-1 bg-amber-50 text-amber-800">2FA off</span>
+                    ) : (
+                      u.totp_enabled && <span className="badge ml-1 bg-zinc-100 text-zinc-700">2FA</span>
+                    )}
                     {!staff && u.wa_opt_out && <span className="badge ml-1 bg-zinc-100 text-zinc-600">WA opt-out</span>}
                   </td>
                   <td className="whitespace-nowrap tabular-nums" style={{ color: "var(--s-text-2)" }}>

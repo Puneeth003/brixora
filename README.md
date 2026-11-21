@@ -28,7 +28,7 @@ src/lib/crm-constants.ts pipeline, client types/sources, activity and agent-type
 src/lib/member.ts        member-account helpers (unread replies)
 src/lib/storage.ts       uploads on disk under UPLOAD_DIR
 db/schema.sql            base tables + public views
-db/migrations/           002 → 010: apply every file in number order after schema.sql (there is no 006)
+db/migrations/           002 → 011: apply every file in number order after schema.sql (there is no 006)
 db/seed.sql              demo listings (generated)
 db/demo-workflow.sql     demo submissions, change requests, enquiries, message log
 db/demo-crm.sql          demo agents/broker, clients, conversations, a visitor member
@@ -47,7 +47,7 @@ The admin panel has its own look (floating dark sidebar, Nunito Sans). Its theme
   - `agent`: the CRM only (clients, inbox, profile), and only the clients assigned to them (`clientScope` in `src/lib/crm.ts`). Admin-only pages and actions use `requireAdmin` and send agents back to `/admin/clients`.
   - `agent_type` is `agent` (in-house) or `broker` (partner). A broker without an email is a record only and can't sign in.
   - Deactivating a staff account, or changing its email or role, ends its sessions.
-- **Staff sign-in** is email + scrypt password, then a TOTP code (secret AES-256-GCM encrypted with `AUTH_SECRET`, each code accepted once). `ADMIN_2FA=off` makes it password-only; 2FA is on by default and applies to agents too.
+- **Staff sign-in** is email + scrypt password, then a TOTP code (secret AES-256-GCM encrypted with `AUTH_SECRET`, each code accepted once). 2FA is on by default for every admin and agent; an admin can switch it off or on per person (Users → name → Access → Two-factor sign-in).
 - **Staff password reset** (`/admin/forgot-password`):
   - Emailed 6-digit code, stored only as an HMAC. It expires in 10 minutes and allows 5 tries. At most 3 codes per 10 minutes per account, and 5 requests per 15 minutes per email.
   - Unknown emails get the same generic answer.
@@ -74,6 +74,7 @@ mysql -u USER -p DBNAME < db/migrations/007_keep_activity_history.sql
 mysql -u USER -p DBNAME < db/migrations/008_auditor_flow.sql
 mysql -u USER -p DBNAME < db/migrations/009_location_documents_consent.sql
 mysql -u USER -p DBNAME < db/migrations/010_broadcasts.sql
+mysql -u USER -p DBNAME < db/migrations/011_user_2fa_switch.sql
 # optional demo data, in this order:
 mysql -u USER -p DBNAME < db/seed.sql            # listings
 mysql -u USER -p DBNAME < db/demo-workflow.sql   # submissions, requests, enquiries, messages
@@ -92,7 +93,7 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
 
 1. **Database:**
    - hPanel → Databases → MySQL Databases → create a database and user.
-   - With phpMyAdmin → Import, import `db/schema.sql`, then every file in `db/migrations/` in number order (002, 003, 004, 005, 007, 008, 009, 010, …).
+   - With phpMyAdmin → Import, import `db/schema.sql`, then every file in `db/migrations/` in number order (002, 003, 004, 005, 007, 008, 009, 010, 011, …).
    - Optional demo data: `db/seed.sql`, `db/demo-workflow.sql`, `db/demo-crm.sql`.
    - Existing install: import only the migrations you haven't applied, in order.
 2. **Config values** (phpMyAdmin → SQL):
@@ -112,7 +113,7 @@ Demo agents have no password: set one from Admin → Agents & brokers, or use "F
 5. **Uploads folder:** create a folder outside the app directory (e.g. `/home/<user>/brixora-uploads`) and set `UPLOAD_DIR` to it. Redeploys replace the app folder, so photos must not live inside it. Include this folder in your backups.
 6. **Admin account:**
    - Run `npm run admin:create -- you@yourdomain.in` once, over SSH or locally with the `DB_*` variables pointing at the Hostinger database (enable Remote MySQL for your IP).
-   - The first sign-in at `/admin/login` walks you through authenticator-app setup (unless `ADMIN_2FA=off`).
+   - The first sign-in at `/admin/login` walks you through authenticator-app setup (unless an admin switched two-factor sign-in off for that account).
    - Lost the authenticator? Run `npm run admin:create -- you@yourdomain.in --reset-2fa`. Forgot the password? Use "Forgot password" on the login page with the same email you gave `admin:create`; any other address gets the same "we've sent a code" message but no email (the server log says so).
 7. **Agents & brokers:**
    - Add staff in Admin → Agents & brokers. With an email and "send welcome email", they get a link to set their password.

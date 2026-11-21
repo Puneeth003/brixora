@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { adminMfaRequired, requireStaff } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { envOverview, envs } from "@/lib/env";
 import { mailConfigured, mailSummary } from "@/lib/mail";
@@ -106,8 +106,8 @@ function StatusRow({ label, on, detail }: { label: string; on: boolean; detail?:
 }
 
 async function ProfileSection({ userId, email }: { userId: string; email: string }) {
-  const user = await db.one<{ name: string | null; work_phone: string | null; totp_enabled: boolean }>(
-    "SELECT name, work_phone, totp_enabled FROM users WHERE id = ?",
+  const user = await db.one<{ name: string | null; work_phone: string | null; totp_enabled: boolean; mfa_required: boolean | number }>(
+    "SELECT name, work_phone, totp_enabled, mfa_required FROM users WHERE id = ?",
     [userId],
   );
   return (
@@ -120,7 +120,7 @@ async function ProfileSection({ userId, email }: { userId: string; email: string
       </Card>
       <Card title="Two-factor authentication">
         <ul className="divide-y divide-[var(--s-border)]">
-          <StatusRow label="Required for staff" on={await adminMfaRequired()} detail="ADMIN_2FA in Settings → Environment variables." />
+          <StatusRow label="Required for your account" on={Boolean(Number(user?.mfa_required))} detail="Admins switch this per person in Users → name → Access." />
           <StatusRow label="Authenticator set up on your account" on={Boolean(user?.totp_enabled)} />
         </ul>
       </Card>
@@ -358,6 +358,7 @@ async function EnvSection() {
 
 async function SecuritySection({ email }: { email: string }) {
   const sessions = await db.count("SELECT COUNT(*) FROM sessions WHERE kind = 'admin' AND expires_at > UTC_TIMESTAMP(3)");
+  const mfaOff = await db.count("SELECT COUNT(*) FROM users WHERE role IN ('admin', 'agent') AND is_active = 1 AND mfa_required = 0");
   const whatsappOn = Boolean(await whatsappConnection());
   const envProblems = await whatsappEnvProblems();
   const mailOn = await mailConfigured();
@@ -366,7 +367,11 @@ async function SecuritySection({ email }: { email: string }) {
     <>
       <Card title="Security" description="Read-only. These are configured through environment variables.">
         <ul className="divide-y divide-[var(--s-border)]">
-          <StatusRow label="Two-factor authentication" on={await adminMfaRequired()} detail="ADMIN_2FA" />
+          <StatusRow
+            label="Two-factor authentication"
+            on={mfaOff === 0}
+            detail={mfaOff ? `Off for ${mfaOff} staff account${mfaOff === 1 ? "" : "s"}: Users → name → Access` : "On for every staff account"}
+          />
           <StatusRow label="Email" on={mailOn} detail={mailOn ? `${mail.host} · from ${mail.from || "(no sender set)"}` : "SMTP_HOST"} />
           <StatusRow label="WhatsApp" on={whatsappOn}
             detail={!whatsappOn && envProblems.length ? `${envProblems.join(", ")}: placeholder text, not a real value` : "Settings → WhatsApp, or WHATSAPP_TOKEN"}

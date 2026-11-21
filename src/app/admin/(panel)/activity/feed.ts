@@ -409,6 +409,8 @@ const USER_VERBS: Record<string, string> = {
   blocked: "blocked member",
   unblocked: "unblocked member",
   invite_sent: "sent a sign-in invite to",
+  mfa_on: "switched on two-factor sign-in for",
+  mfa_off: "switched off two-factor sign-in for",
 };
 
 /** Account entries where the person acted on their own account; no target is shown. */

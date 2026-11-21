@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
-import { adminMfaRequired, requireStaff } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getSite } from "@/lib/site-settings";
 import { fromNow } from "@/lib/time";
@@ -55,6 +55,12 @@ async function Shell({ children }: { children: React.ReactNode }) {
   };
   const themeVars = { "--brand": color("brand_color"), "--sidebar-bg": color("sidebar_color") } as React.CSSProperties;
 
+  // Admins see which staff accounts sign in with a password only.
+  const mfaOff = isAdmin
+    ? await db.all<{ name: string | null; email: string }>(
+        "SELECT name, email FROM users WHERE role IN ('admin', 'agent') AND is_active = 1 AND mfa_required = 0 ORDER BY name",
+      )
+    : [];
   const displayName = staff.name ?? staff.email;
   const signOut = (
     <form action={adminSignOut}>
@@ -82,10 +88,10 @@ async function Shell({ children }: { children: React.ReactNode }) {
             </Link>
           </header>
           <main className="min-w-0 flex-1 px-4 pt-3 pb-10 sm:px-8 md:pt-8">
-            {isAdmin && !(await adminMfaRequired()) && (
-              <p role="alert" className="mb-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 ring-1 ring-red-200">
-                Two-step login is switched off (ADMIN_2FA=off). Anyone with a staff password can get in. Remove ADMIN_2FA from the server&apos;s
-                environment variables to turn it back on.
+            {mfaOff.length > 0 && (
+              <p role="alert" className="mb-5 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
+                Two-factor sign-in is off for {mfaOff.map((u) => u.name || u.email).join(", ")}: a password alone gets {mfaOff.length === 1 ? "that account" : "those accounts"} in.
+                Switch it on from <Link href="/admin/users" className="underline">Users</Link> → the person → Access.
               </p>
             )}
             {children}

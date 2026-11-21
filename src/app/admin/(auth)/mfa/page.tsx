@@ -43,7 +43,7 @@ async function Content() {
     return (
       <Problem title="Server setup needed">
         <code>AUTH_SECRET</code> isn&apos;t set on the server, so two-factor sign-in can&apos;t work. Add it in Hostinger → Node.js app →
-        Environment variables (48+ random characters) and redeploy, or set <code>ADMIN_2FA=off</code> for password-only sign-in.
+        Environment variables (48+ random characters) and redeploy, or ask an admin to switch off two-factor sign-in for your account (Users → your name).
       </Problem>
     );
   }

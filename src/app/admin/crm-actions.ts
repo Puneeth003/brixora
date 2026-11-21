@@ -466,6 +466,27 @@ export async function setStaffActive(id: string, active: boolean) {
   revalidatePath("/admin", "layout");
 }
 
+/**
+ * Two-factor sign-in on/off for one staff user (admins only). On: the next request
+ * asks for the authenticator code (and sets it up if they never have). Off: email and
+ * password are enough.
+ */
+export async function setStaffMfa(id: string, on: boolean): Promise<{ ok: boolean; message?: string; error?: string }> {
+  const admin = await requireAdmin();
+  if (!isUuid(id)) return { ok: false, error: "Unknown user." };
+  const changed = await db.update("users", { mfa_required: on }, "id = ? AND role IN ('admin', 'agent') AND mfa_required <> ?", [id, on]);
+  if (changed) {
+    await logActivity({ entityType: "user", entityId: id, action: on ? "mfa_on" : "mfa_off", actorType: "admin", actorId: admin.userId });
+  }
+  revalidatePath("/admin", "layout");
+  return {
+    ok: true,
+    message: on
+      ? "Two-factor sign-in is on. They'll be asked for their authenticator code (and set it up if needed) on their next page."
+      : "Two-factor sign-in is off. Email and password are enough for this account now.",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Members: visitors and owners (admin)
 // ---------------------------------------------------------------------------
