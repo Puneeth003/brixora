@@ -99,6 +99,8 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
   const [name, setName] = useState("");
   const [consent, setConsent] = useState({ owner: false, brokerage: false });
   const [error, setError] = useState<string | null>(null);
+  // Field the last "Continue" stopped on; its message shows under that field until it is fixed.
+  const [errorField, setErrorField] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState("");
   const [draft, setDraft] = useState<{ id: string; ref: string; uploaded: number; docsUploaded: number } | null>(null);
@@ -158,6 +160,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
     setName("");
     setConsent({ owner: false, brokerage: false });
     setError(null);
+    setErrorField(null);
     setRestored(false);
     setForm((f) => ({
       ...f,
@@ -185,50 +188,66 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
 
   // The same limits the server applies (src/lib/validation.ts), so a submission that
   // passes here isn't rejected at the end.
-  const stepError = useMemo(() => {
+  const stepError = useMemo((): StepError | null => {
+    const fail = (field: string | null, message: string) => ({ field, message });
     if (step === S.location) {
       const city = form.city.trim().length;
-      if (city < 2 || city > 60) return "Enter the city.";
+      if (city < 2 || city > 60) return fail("city", "Enter the city.");
       const locality = form.locality.trim().length;
-      if (locality < 2) return "Enter the locality.";
-      if (locality > 80) return "Locality is too long (80 characters at most).";
+      if (locality < 2) return fail("locality", "Enter the locality.");
+      if (locality > 80) return fail("locality", "Locality is too long (80 characters at most).");
       const address = form.private_address.trim().length;
-      if (address < 5) return "Enter the address (kept private).";
-      if (address > 300) return "Address is too long (300 characters at most).";
-      if (form.private_landmark.trim().length > 200) return "Landmark is too long (200 characters at most).";
-      if (form.latitude === null || form.longitude === null) return "Drop a pin on the map at the property.";
+      if (address < 5) return fail("private_address", "Enter the address (kept private).");
+      if (address > 300) return fail("private_address", "Address is too long (300 characters at most).");
+      if (form.private_landmark.trim().length > 200) return fail("private_landmark", "Landmark is too long (200 characters at most).");
+      if (form.latitude === null || form.longitude === null) return fail("pin", "Drop a pin on the map at the property.");
     }
     if (step === S.details) {
       const title = form.title.trim().length;
-      if (title < 10) return "Title should be at least 10 characters.";
-      if (title > 120) return "Title is too long (120 characters at most).";
+      if (title < 10) return fail("title", "Title should be at least 10 characters.");
+      if (title > 120) return fail("title", "Title is too long (120 characters at most).");
       const price = Number(form.price);
-      if (!price || price < 1000) return "Enter a valid price.";
-      if (price > 10_000_000_000) return "That price looks too high. Check the number of zeros.";
-      if (residential && !form.bedrooms) return "Choose the number of bedrooms.";
+      if (!price || price < 1000) return fail("price", "Enter a valid price.");
+      if (price > 10_000_000_000) return fail("price", "That price looks too high. Check the number of zeros.");
+      if (residential && !form.bedrooms) return fail("bedrooms", "Choose the number of bedrooms.");
       const area = Number(form.area_sqft);
-      if (!area) return "Enter the area in sq.ft.";
-      if (area < 50) return "Area looks too small (50 sq.ft at least).";
-      if (area > 10_000_000) return "Area looks too large. Check the number.";
-      if (form.description.trim().length < 30) return "Describe the property in at least 30 characters.";
+      if (!area) return fail("area_sqft", "Enter the area in sq.ft.");
+      if (area < 50) return fail("area_sqft", "Area looks too small (50 sq.ft at least).");
+      if (area > 10_000_000) return fail("area_sqft", "Area looks too large. Check the number.");
+      if (form.description.trim().length < 30) return fail("description", "Describe the property in at least 30 characters.");
     }
-    if (step === S.photos && photos.length < PHOTO_LIMITS.min) return `Add at least ${PHOTO_LIMITS.min} photos.`;
+    if (step === S.photos && photos.length < PHOTO_LIMITS.min) return fail(null, `Add at least ${PHOTO_LIMITS.min} photos.`);
     if (step === S.name) {
-      if (name.trim().length < 2) return "Enter your name.";
-      if (name.trim().length > 80) return "Name is too long.";
-      if (!consent.owner || !consent.brokerage) return "Please tick both boxes to submit.";
+      if (name.trim().length < 2) return fail("name", "Enter your name.");
+      if (name.trim().length > 80) return fail("name", "Name is too long.");
+      if (!consent.owner || !consent.brokerage) return fail("consent", "Please tick both boxes to submit.");
     }
     return null;
   }, [step, form, photos.length, name, residential, consent]);
 
+  // Shows the step's first problem; a field problem is shown under that field, which is
+  // scrolled into view and focused (it can be far above the Continue button).
+  function showStepError(e: StepError) {
+    setError(e.message);
+    setErrorField(e.field);
+    if (!e.field) return;
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`[data-field="${e.field}"]`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.querySelector<HTMLElement>("input, textarea, button")?.focus({ preventScroll: true });
+    });
+  }
+
   const next = () => {
-    if (stepError) return setError(stepError);
+    if (stepError) return showStepError(stepError);
     setError(null);
+    setErrorField(null);
     setStep((s) => s + 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const back = () => {
     setError(null);
+    setErrorField(null);
     // From "Your name", skip Verify: the number is already verified and the OTP step
     // would send them straight forward again.
     setStep((s) => (s === S.name ? S.documents : Math.max(0, s - 1)));
@@ -272,8 +291,9 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
   }
 
   async function submit() {
-    if (stepError) return setError(stepError);
+    if (stepError) return showStepError(stepError);
     setError(null);
+    setErrorField(null);
     setSubmitting(true);
     try {
       let current = draft;
@@ -365,6 +385,10 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
     );
   }
 
+  // Cleared as soon as the field is fixed; the next Continue moves on to the next problem.
+  const fieldError = errorField && stepError?.field === errorField ? stepError : null;
+  const errorFor = (field: string) => (fieldError?.field === field ? fieldError.message : null);
+
   return (
     <div className="space-y-6">
       {restored && (
@@ -434,10 +458,10 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
         {step === S.location && (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="City">
+              <Field name="city" error={errorFor("city")} label="City">
                 <input className="input" value={form.city} onChange={(e) => set("city", e.target.value)} />
               </Field>
-              <Field label="Locality / area" hint="Shown publicly" required>
+              <Field name="locality" error={errorFor("locality")} label="Locality / area" hint="Shown publicly" required>
                 <input
                   className="input"
                   value={form.locality}
@@ -446,7 +470,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
                 />
               </Field>
             </div>
-            <Field label="Full address" hint="Private – only our team sees this" required>
+            <Field name="private_address" error={errorFor("private_address")} label="Full address" hint="Private – only our team sees this" required>
               <textarea
                 className="input"
                 rows={2}
@@ -455,14 +479,14 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
                 placeholder="House name / number, street"
               />
             </Field>
-            <Field label="Landmark" hint="Private, optional">
+            <Field name="private_landmark" error={errorFor("private_landmark")} label="Landmark" hint="Private, optional">
               <input
                 className="input"
                 value={form.private_landmark}
                 onChange={(e) => set("private_landmark", e.target.value)}
               />
             </Field>
-            <Field label="Pin the property on the map" hint="Private – helps our auditor find it" required>
+            <Field name="pin" error={errorFor("pin")} label="Pin the property on the map" hint="Private – helps our auditor find it" required>
               <LocationPicker
                 value={form.latitude !== null && form.longitude !== null ? { lat: form.latitude, lng: form.longitude } : null}
                 onChange={onPin}
@@ -474,7 +498,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
 
         {step === S.details && (
           <>
-            <Field label="Listing title" required>
+            <Field name="title" error={errorFor("title")} label="Listing title" required>
               <input
                 className="input"
                 value={form.title}
@@ -484,7 +508,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
               />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={form.listing_type === "rent" ? "Monthly rent (₹)" : "Expected price (₹)"} required>
+              <Field name="price" error={errorFor("price")} label={form.listing_type === "rent" ? "Monthly rent (₹)" : "Expected price (₹)"} required>
                 <input
                   className="input"
                   inputMode="numeric"
@@ -506,7 +530,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
             <div className="grid gap-4 sm:grid-cols-3">
               {residential && (
                 <>
-                  <Field label="Bedrooms" required>
+                  <Field name="bedrooms" error={errorFor("bedrooms")} label="Bedrooms" required>
                     <Dropdown
                       variant="field"
                       label="Bedrooms"
@@ -526,7 +550,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
                   </Field>
                 </>
               )}
-              <Field label={form.property_type === "plot" ? "Area (sq.ft)" : "Built-up area (sq.ft)"} required>
+              <Field name="area_sqft" error={errorFor("area_sqft")} label={form.property_type === "plot" ? "Area (sq.ft)" : "Built-up area (sq.ft)"} required>
                 <input
                   className="input"
                   inputMode="numeric"
@@ -569,7 +593,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
                 />
               </Field>
             </div>
-            <Field label="Description" hint="Don't include phone numbers or exact address" required>
+            <Field name="description" error={errorFor("description")} label="Description" hint="Don't include phone numbers or exact address" required>
               <textarea
                 className="input"
                 rows={5}
@@ -739,10 +763,10 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
 
         {step === S.name && (
           <>
-            <Field label="Your name" required>
+            <Field name="name" error={errorFor("name")} label="Your name" required>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={80} />
             </Field>
-            <div className="space-y-2">
+            <div className="space-y-2" data-field="consent">
               <label className="flex items-start gap-2.5 text-sm">
                 <input
                   type="checkbox"
@@ -764,6 +788,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
                   are not shared with them.
                 </span>
               </label>
+              {errorFor("consent") && <p className="text-sm text-red-600">{errorFor("consent")}</p>}
             </div>
             <p className="text-sm text-zinc-500">
               By submitting you agree that {brandName} may contact you on WhatsApp about this listing. See our{" "}
@@ -775,7 +800,7 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
           </>
         )}
 
-        {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        {error && !errorField && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         {progress && <p className="text-sm text-zinc-600">{progress}</p>}
 
         <div className="flex justify-between gap-3 border-t border-zinc-100 pt-4">
@@ -802,9 +827,25 @@ export function PostWizard({ defaultCity, brandName, prefill = {} }: { defaultCi
   );
 }
 
-function Field({ label, hint, required, children }: { label: string; hint?: string; required?: boolean; children: React.ReactNode }) {
+type StepError = { field: string | null; message: string };
+
+function Field({
+  name,
+  error,
+  label,
+  hint,
+  required,
+  children,
+}: {
+  name?: string;
+  error?: string | null;
+  label: string;
+  hint?: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
+    <div data-field={name} className={error ? "[&_.input]:border-red-400 [&_.input]:ring-1 [&_.input]:ring-red-400" : undefined}>
       <label className="label">
         {label}
         {required && (
@@ -816,6 +857,11 @@ function Field({ label, hint, required, children }: { label: string; hint?: stri
         {hint && <span className="font-normal text-zinc-400">· {hint}</span>}
       </label>
       {children}
+      {error && (
+        <p role="alert" className="mt-1.5 text-sm text-red-600">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
