@@ -5,7 +5,7 @@ import { db, dbConfigured, transaction, uuid } from "@/lib/db";
 import { hmac, randomDigits, safeEqual } from "@/lib/crypto";
 import { normalizeIndianPhone } from "@/lib/format";
 import { firstError, ownerNameSchema } from "@/lib/validation";
-import { recentOtpCount, sendOtp, sendWelcomeIfNew, whatsappConnection } from "@/lib/whatsapp";
+import { sendOtp, sendWelcomeIfNew, whatsappConnection } from "@/lib/whatsapp";
 
 // Owner sign-in: phone → 6-digit code on WhatsApp → session cookie → (first time) name.
 // The name is asked once, here; owners change it later in My account.
@@ -14,7 +14,6 @@ type Result = { ok: true } | { ok: false; error: string };
 
 const CODE_TTL_MS = 5 * 60_000;
 const MAX_VERIFY_TRIES = 5;
-const OTP_PER_HOUR = 3;
 
 const codeHash = (phone: string, code: string) => hmac("otp", `${phone}:${code}`);
 
@@ -42,9 +41,8 @@ export async function sendLoginCode(rawPhone: string): Promise<Result> {
     return { ok: false, error: "WhatsApp sign-in isn't set up yet. Please contact us to get access." };
   }
 
-  if ((await recentOtpCount(phone)) >= OTP_PER_HOUR || (await tooManyAttempts("otp_send", phone, OTP_PER_HOUR * 2, 60, { countSuccess: true }))) {
-    return { ok: false, error: "Too many codes requested. Please try again in an hour." };
-  }
+  // No limit on how many codes a number can request (removed at the owner's request).
+  // Each send is still logged, and wrong codes are still limited in verifyLoginCode.
   await recordAttempt("otp_send", phone, true);
 
   const code = randomDigits(6);
